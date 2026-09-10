@@ -154,12 +154,14 @@ class LMSApiClient {
     return res;
   }
 
-  public async loginAdmin(email: string, password: string) {
-    const res = await this.request<{ user: any; accessToken: string; refreshToken: string }>(
+  public async loginAdmin(email: string, password: string, mfaCode?: string) {
+    const res = await this.request<{ user?: any; accessToken?: string; refreshToken?: string; mfaRequired?: boolean; message?: string }>(
       '/auth/admin/login',
-      { method: 'POST', body: JSON.stringify({ email, password }) }
+      { method: 'POST', body: JSON.stringify({ email, password, mfaCode }) }
     );
-    this.setTokens(res.accessToken, res.refreshToken);
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
     return res;
   }
 
@@ -171,6 +173,14 @@ class LMSApiClient {
           body: JSON.stringify({ refreshToken: this.refreshToken }),
         });
       }
+    } finally {
+      this.clearTokens();
+    }
+  }
+
+  public async logoutAllSessions() {
+    try {
+      await this.request('/auth/logout-all', { method: 'POST' });
     } finally {
       this.clearTokens();
     }
@@ -269,7 +279,7 @@ class LMSApiClient {
     });
   }
 
-  // --- Admin APIs ---
+  // --- Admin & Security Center APIs ---
 
   public async getAdminStats() {
     return this.request<any>('/admin/stats');
@@ -279,6 +289,13 @@ class LMSApiClient {
     return this.request<{ users: any[] }>('/admin/users');
   }
 
+  public async createAdminUser(data: { name: string; email: string; password: string; role: string; permissions?: string[] }) {
+    return this.request<{ user: any }>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   public async updateUserRole(userId: string, role: string) {
     return this.request<{ message: string }>(`/admin/users/${userId}/role`, {
       method: 'PATCH',
@@ -286,8 +303,114 @@ class LMSApiClient {
     });
   }
 
+  public async updateUserPermissions(userId: string, permissions: string[]) {
+    return this.request<{ message: string; permissions: string[] }>(`/admin/users/${userId}/permissions`, {
+      method: 'PATCH',
+      body: JSON.stringify({ permissions }),
+    });
+  }
+
+  public async updateUserStatus(userId: string, status: string) {
+    return this.request<{ message: string }>(`/admin/users/${userId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  public async deleteUser(userId: string) {
+    return this.request<{ message: string }>(`/admin/users/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  public async getAdminCourses() {
+    return this.request<{ courses: any[] }>('/admin/courses');
+  }
+
+  public async updateCourseStatus(courseId: string, status: string) {
+    return this.request<{ message: string }>(`/admin/courses/${courseId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  public async deleteCourse(courseId: string) {
+    return this.request<{ message: string }>(`/admin/courses/${courseId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  public async getAdminEnrollments() {
+    return this.request<{ enrollments: any[] }>('/admin/enrollments');
+  }
+
+  public async createEnrollment(userId: string, courseId: string) {
+    return this.request<{ enrollment: any }>('/admin/enrollments', {
+      method: 'POST',
+      body: JSON.stringify({ userId, courseId }),
+    });
+  }
+
+  public async deleteEnrollment(id: string) {
+    return this.request<{ message: string }>(`/admin/enrollments/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   public async getAdminAuditLogs() {
     return this.request<{ auditLogs: any[] }>('/admin/audit-logs');
+  }
+
+  public async getAdminReports() {
+    return this.request<any>('/admin/reports/overview');
+  }
+
+  public async getAdminSettings() {
+    return this.request<{ settings: any }>('/admin/settings');
+  }
+
+  public async updateAdminSettings(settings: any) {
+    return this.request<{ settings: any }>('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  public async getAdminSecurityOverview() {
+    return this.request<any>('/admin/security/overview');
+  }
+
+  public async revokeAdminSession(sessionId: string) {
+    return this.request<{ message: string }>(`/admin/security/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  public async revokeAllAdminSessions() {
+    return this.request<{ message: string }>('/admin/security/revoke-all-sessions', {
+      method: 'POST',
+    });
+  }
+
+  public async setupMFA() {
+    return this.request<{ secret: string; otpAuthUri: string; recoveryCodes: string[]; instructions: string }>(
+      '/admin/security/mfa/setup',
+      { method: 'POST' }
+    );
+  }
+
+  public async verifyMFA(token: string) {
+    return this.request<{ message: string }>('/admin/security/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  public async disableMFA(password: string) {
+    return this.request<{ message: string }>('/admin/security/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   }
 }
 

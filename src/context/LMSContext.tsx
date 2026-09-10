@@ -43,9 +43,10 @@ interface LMSContextType {
   registerStudent: (data: { name: string; email: string; password: string; studentId?: string; gradeLevel?: string }) => Promise<void>;
   loginInstructor: (email: string, pass: string) => Promise<void>;
   registerInstructor: (data: { name: string; email: string; password: string; specialization?: string; department?: string }) => Promise<void>;
-  loginAdmin: (email: string, pass: string) => Promise<void>;
+  loginAdmin: (email: string, pass: string, mfaCode?: string) => Promise<any>;
   bootstrapAdmin: (data: { name: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
+  logoutAllSessions: () => Promise<void>;
   
   // Theme & A11y
   darkMode: boolean;
@@ -53,6 +54,10 @@ interface LMSContextType {
   toggleDarkMode: () => void;
   highContrast: boolean;
   setHighContrast: (val: boolean) => void;
+  fontSize: 'normal' | 'large' | 'xlarge';
+  setFontSize: (size: 'normal' | 'large' | 'xlarge') => void;
+  reducedMotion: boolean;
+  setReducedMotion: (val: boolean) => void;
 
   // Navigation & Routing
   currentView: AppView;
@@ -133,7 +138,8 @@ function pathToView(path: string): AppView {
   if (path === '/learn') return 'learn';
   if (path === '/quizzes') return 'quizzes';
   if (path === '/assignments') return 'assignments';
-  if (path === '/admin-portal' || path === '/instructor-portal') return 'admin-portal';
+  if (path === '/admin-portal' || path === '/admin/portal') return 'admin-portal';
+  if (path === '/instructor-portal' || path === '/instructor/portal') return 'instructor-portal';
   if (path === '/architecture') return 'architecture';
   if (path === '/dashboard') return 'dashboard';
   return 'dashboard';
@@ -152,8 +158,8 @@ function viewToPath(view: AppView): string {
     case 'learn': return '/learn';
     case 'quizzes': return '/quizzes';
     case 'assignments': return '/assignments';
-    case 'admin-portal':
-    case 'instructor-portal': return '/admin-portal';
+    case 'admin-portal': return '/admin/portal';
+    case 'instructor-portal': return '/instructor/portal';
     case 'architecture': return '/architecture';
     case 'dashboard':
     default: return '/dashboard';
@@ -161,23 +167,62 @@ function viewToPath(view: AppView): string {
 }
 
 export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Theme state
+  // Theme and Accessibility State
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('lti_theme');
     return saved !== null ? saved === 'dark' : true;
   });
-  const [highContrast, setHighContrast] = useState<boolean>(false);
+  const [highContrast, setHighContrast] = useState<boolean>(() => {
+    return localStorage.getItem('lti_high_contrast') === 'true';
+  });
+  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>(() => {
+    return (localStorage.getItem('lti_font_size') as 'normal' | 'large' | 'xlarge') || 'normal';
+  });
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    return localStorage.getItem('lti_reduced_motion') === 'true';
+  });
 
   useEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
       root.classList.add('dark');
+      root.classList.remove('light');
       localStorage.setItem('lti_theme', 'dark');
     } else {
       root.classList.remove('dark');
+      root.classList.add('light');
       localStorage.setItem('lti_theme', 'light');
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (highContrast) {
+      root.classList.add('high-contrast');
+      localStorage.setItem('lti_high_contrast', 'true');
+    } else {
+      root.classList.remove('high-contrast');
+      localStorage.setItem('lti_high_contrast', 'false');
+    }
+  }, [highContrast]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('font-size-normal', 'font-size-large', 'font-size-xlarge');
+    root.classList.add(`font-size-${fontSize}`);
+    localStorage.setItem('lti_font_size', fontSize);
+  }, [fontSize]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (reducedMotion) {
+      root.classList.add('reduced-motion');
+      localStorage.setItem('lti_reduced_motion', 'true');
+    } else {
+      root.classList.remove('reduced-motion');
+      localStorage.setItem('lti_reduced_motion', 'false');
+    }
+  }, [reducedMotion]);
 
   const toggleDarkMode = () => setDarkMode((prev) => !prev);
 
@@ -422,10 +467,13 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshCourses();
   };
 
-  const loginAdmin = async (email: string, pass: string) => {
-    const res = await api.loginAdmin(email, pass);
-    setCurrentUser(res.user);
-    await refreshCourses();
+  const loginAdmin = async (email: string, pass: string, mfaCode?: string) => {
+    const res = await api.loginAdmin(email, pass, mfaCode);
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const bootstrapAdmin = async (data: { name: string; email: string; password: string }) => {
@@ -437,6 +485,19 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = async () => {
     try {
       await api.logout();
+    } catch {
+      // ignore
+    } finally {
+      setCurrentUser(null);
+      setEnrolledCourseIds([]);
+      setCourseProgress({});
+      navigate('/student/login');
+    }
+  };
+
+  const logoutAllSessions = async () => {
+    try {
+      await api.logoutAllSessions();
     } catch {
       // ignore
     } finally {
@@ -690,11 +751,16 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginAdmin,
         bootstrapAdmin,
         logout,
+        logoutAllSessions,
         darkMode,
         setDarkMode,
         toggleDarkMode,
         highContrast,
         setHighContrast,
+        fontSize,
+        setFontSize,
+        reducedMotion,
+        setReducedMotion,
         currentView,
         setCurrentView,
         navigate,

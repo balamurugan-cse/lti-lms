@@ -11,6 +11,7 @@ import { CourseDiscovery } from './components/courses/CourseDiscovery';
 import { InteractiveLessonView } from './components/learn/InteractiveLessonView';
 import { AssignmentsView } from './components/assignments/AssignmentsView';
 import { InstructorAdminPortal } from './components/admin/InstructorAdminPortal';
+import { ProtectedAdminRoute } from './components/auth/ProtectedAdminRoute';
 import { ArchitectureView } from './components/architecture/ArchitectureView';
 import { QuizModal } from './components/assessment/QuizModal';
 import { CertificateModal } from './components/certificates/CertificateModal';
@@ -132,8 +133,14 @@ const LMSMainContent: React.FC = () => {
 
             {currentView === 'assignments' && <AssignmentsView />}
 
-            {(currentView === 'admin-portal' || currentView === 'instructor-portal') && (
-              <InstructorAdminPortal />
+            {currentView === 'admin-portal' && (
+              <ProtectedAdminRoute requiredRoles={['ADMIN', 'SUPER_ADMIN']}>
+                <InstructorAdminPortal portalMode="ADMIN" initialTab="overview" />
+              </ProtectedAdminRoute>
+            )}
+
+            {currentView === 'instructor-portal' && (
+              <InstructorAdminPortal portalMode="INSTRUCTOR" initialTab="builder" />
             )}
 
             {currentView === 'architecture' && <ArchitectureView />}
@@ -153,7 +160,28 @@ const LMSMainContent: React.FC = () => {
               LEARN • THINK • INOVATE
             </span>
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
+            <button
+              onClick={() => navigate('/courses')}
+              className="hover:text-amber-400 transition-colors"
+            >
+              Courses
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => navigate('/quizzes')}
+              className="hover:text-amber-400 transition-colors"
+            >
+              Assessments
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => navigate('/assignments')}
+              className="hover:text-amber-400 transition-colors"
+            >
+              Assignments
+            </button>
+            <span>•</span>
             <button
               onClick={() => navigate('/architecture')}
               className="hover:text-amber-400 transition-colors"
@@ -163,19 +191,21 @@ const LMSMainContent: React.FC = () => {
             <span>•</span>
             <button
               onClick={() => setShowAccessibilityModal(true)}
-              className="hover:text-amber-400 transition-colors"
+              className="hover:text-amber-400 transition-colors font-medium text-amber-400/90"
             >
-              WCAG 2.1 AA Guide
+              Accessibility & Theme
             </button>
-            <span>•</span>
-            <button
-              onClick={() => navigate('/admin/setup')}
-              className="hover:text-amber-400 transition-colors"
-            >
-              Admin Setup
-            </button>
-            <span>•</span>
-            <span>Production Build v2026.1</span>
+            {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={() => navigate('/admin/portal')}
+                  className="hover:text-amber-400 transition-colors text-amber-300 font-semibold"
+                >
+                  Admin Console
+                </button>
+              </>
+            )}
           </div>
         </div>
       </footer>

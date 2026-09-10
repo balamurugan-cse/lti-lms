@@ -199,14 +199,14 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
               onClick={() => onNavigate('/instructor/login')}
               className="hover:text-amber-400 transition-colors"
             >
-              Faculty / Instructor Login
+              Faculty Portal
             </button>
             <span>•</span>
             <button
-              onClick={() => onNavigate('/admin/login')}
+              onClick={() => onNavigate('/courses')}
               className="hover:text-amber-400 transition-colors"
             >
-              Admin Portal
+              Browse Courses
             </button>
           </div>
         </div>

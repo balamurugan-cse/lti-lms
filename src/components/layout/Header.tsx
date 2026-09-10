@@ -170,6 +170,39 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAccessibilityModal }) => {
               <Shield className="w-3.5 h-3.5 text-amber-400" />
               Architecture Spec
             </button>
+
+            {/* Role-Specific Consoles - Only shown to authenticated staff */}
+            {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') && (
+              <button
+                id="nav-admin-portal-btn"
+                onClick={() => handleNav('/admin/portal')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                  currentView === 'admin-portal'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/10'
+                }`}
+                title="Open Administrative Security & Operations Portal"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                Admin Console
+              </button>
+            )}
+
+            {currentUser && currentUser.role === 'INSTRUCTOR' && (
+              <button
+                id="nav-instructor-portal-btn"
+                onClick={() => handleNav('/instructor/portal')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                  currentView === 'instructor-portal'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+                title="Open Instructor Teaching Portal"
+              >
+                <Award className="w-3.5 h-3.5 text-amber-400" />
+                Faculty Portal
+              </button>
+            )}
           </nav>
         </div>
 
@@ -314,21 +347,36 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAccessibilityModal }) => {
                     <div className="text-xs font-bold text-slate-200">{currentUser.name}</div>
                     <div className="text-[11px] text-slate-400 truncate">{currentUser.email}</div>
                     <div className="mt-1.5 text-[10px] font-mono text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded inline-block font-semibold">
-                      Authenticated: {currentUser.role}
+                      Role: {currentUser.role}
                     </div>
                   </div>
 
                   <div className="space-y-1 text-xs">
-                    {(currentUser.role === 'ADMIN' || currentUser.role === 'INSTRUCTOR') && (
+                    {(currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') && (
                       <button
+                        id="user-menu-admin-portal-btn"
                         onClick={() => {
                           navigate('/admin-portal');
                           setShowUserMenu(false);
                         }}
-                        className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200"
+                        className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-amber-300"
                       >
                         <Shield className="w-4 h-4 text-amber-400" />
-                        <span>Faculty & Admin Console</span>
+                        <span>Administrative Console</span>
+                      </button>
+                    )}
+
+                    {currentUser.role === 'INSTRUCTOR' && (
+                      <button
+                        id="user-menu-instructor-portal-btn"
+                        onClick={() => {
+                          navigate('/instructor-portal');
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200"
+                      >
+                        <Award className="w-4 h-4 text-amber-400" />
+                        <span>Faculty Console</span>
                       </button>
                     )}
 
@@ -340,7 +388,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAccessibilityModal }) => {
                       className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200"
                     >
                       <LayoutDashboard className="w-4 h-4 text-sky-400" />
-                      <span>Student Dashboard</span>
+                      <span>Learner Dashboard</span>
                     </button>
 
                     <button
@@ -358,47 +406,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAccessibilityModal }) => {
               )}
             </div>
           ) : (
-            /* Separate Login Buttons When Unauthenticated */
+            /* Unauthenticated Navigation: Discreet, No Public Admin Links */
             <div className="flex items-center gap-2">
               <button
                 id="header-student-login-link-btn"
                 onClick={() => navigate('/student/login')}
-                className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-md transition-colors"
+                className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-md transition-colors"
               >
-                Student Sign In
+                Sign In
               </button>
 
-              <div className="relative group">
-                <button
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-xs flex items-center gap-1"
-                  title="Institutional Staff Portals"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Staff</span>
-                </button>
-                <div className="absolute right-0 mt-1 w-44 rounded-xl bg-slate-900 border border-slate-800 shadow-xl p-2 hidden group-hover:block z-50">
-                  <button
-                    onClick={() => navigate('/instructor/login')}
-                    className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:text-amber-400 hover:bg-slate-800 rounded flex items-center gap-2"
-                  >
-                    <Award className="w-3.5 h-3.5" />
-                    Faculty Portal
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/login')}
-                    className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:text-rose-400 hover:bg-slate-800 rounded flex items-center gap-2"
-                  >
-                    <Shield className="w-3.5 h-3.5" />
-                    Admin Portal
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/setup')}
-                    className="w-full text-left px-2.5 py-1.5 text-[11px] text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded flex items-center gap-2 border-t border-slate-800 mt-1 pt-1"
-                  >
-                    <span>Root Setup Wizard</span>
-                  </button>
-                </div>
-              </div>
+              <button
+                id="header-instructor-login-link-btn"
+                onClick={() => navigate('/instructor/login')}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+                title="Instructor / Faculty Portal"
+              >
+                <Award className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Faculty</span>
+              </button>
             </div>
           )}
         </div>
@@ -446,6 +472,40 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAccessibilityModal }) => {
         >
           Assignments
         </button>
+        <button
+          onClick={() => handleNav('/architecture')}
+          className={`px-2.5 py-1 rounded font-semibold whitespace-nowrap ${
+            currentView === 'architecture' ? 'text-amber-400 bg-amber-400/10' : 'text-slate-400'
+          }`}
+        >
+          Architecture
+        </button>
+        {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') && (
+          <button
+            id="mobile-nav-admin-portal-btn"
+            onClick={() => handleNav('/admin/portal')}
+            className={`px-2.5 py-1 rounded font-semibold whitespace-nowrap ${
+              currentView === 'admin-portal'
+                ? 'text-amber-400 bg-amber-400/10'
+                : 'text-amber-300'
+            }`}
+          >
+            Admin Console
+          </button>
+        )}
+        {currentUser && currentUser.role === 'INSTRUCTOR' && (
+          <button
+            id="mobile-nav-instructor-portal-btn"
+            onClick={() => handleNav('/instructor/portal')}
+            className={`px-2.5 py-1 rounded font-semibold whitespace-nowrap ${
+              currentView === 'instructor-portal'
+                ? 'text-amber-400 bg-amber-400/10'
+                : 'text-slate-400'
+            }`}
+          >
+            Faculty
+          </button>
+        )}
       </div>
     </header>
   );

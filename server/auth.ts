@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
-import { db, UserRecord } from './db';
+import { db, UserRecord, AdminPermission, ADMIN_PERMISSIONS } from './db';
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'lti_edutech_production_access_key_sec_91823';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'lti_edutech_production_refresh_key_sec_48921';
@@ -150,6 +150,11 @@ export function requireRole(allowedRoles: Array<'STUDENT' | 'INSTRUCTOR' | 'ADMI
       return;
     }
 
+    if (user.status !== 'ACTIVE') {
+      res.status(403).json({ error: `Account is ${user.status.toLowerCase()}. Access restricted.` });
+      return;
+    }
+
     if (!allowedRoles.includes(user.role)) {
       db.addAuditLog(
         'RBAC_ACCESS_DENIED',
@@ -169,7 +174,72 @@ export function requireRole(allowedRoles: Array<'STUDENT' | 'INSTRUCTOR' | 'ADMI
   };
 }
 
-// Sanitize user for public/client responses
+// Granular Admin Permission Guard
+export function requirePermission(requiredPermission: AdminPermission) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    // Authoritative check directly against the production database
+    const user = db.read().users.find((u) => u.id === req.user?.userId);
+    if (!user) {
+      res.status(401).json({ error: 'User not found in system.' });
+      return;
+    }
+
+    if (user.status !== 'ACTIVE') {
+      res.status(403).json({ error: `Account is ${user.status.toLowerCase()}. Access restricted.` });
+      return;
+    }
+
+    // Enforce ADMIN or SUPER_ADMIN role
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      db.addAuditLog(
+        'RBAC_ADMIN_VIOLATION',
+        `Non-admin user ${user.email} (Role: ${user.role}) attempted action requiring permission ${requiredPermission}`,
+        (req.ip || req.socket.remoteAddress || '127.0.0.1') as string,
+        'WARNING',
+        user.id,
+        user.email
+      );
+      res.status(403).json({ error: 'Forbidden. Administrator authorization required.' });
+      return;
+    }
+
+    // SUPER_ADMIN automatically holds all permissions
+    if (user.role === 'SUPER_ADMIN') {
+      next();
+      return;
+    }
+
+    // Standard Admin receives explicit or default administrative permissions
+    const effectivePermissions = user.permissions && user.permissions.length > 0
+      ? user.permissions
+      : [...ADMIN_PERMISSIONS]; // Default newly provisioned admin receives standard set
+
+    if (!effectivePermissions.includes(requiredPermission)) {
+      db.addAuditLog(
+        'RBAC_PERMISSION_DENIED',
+        `Admin ${user.email} lacks required permission: ${requiredPermission}`,
+        (req.ip || req.socket.remoteAddress || '127.0.0.1') as string,
+        'WARNING',
+        user.id,
+        user.email
+      );
+      res.status(403).json({
+        error: `Forbidden. Missing required administrative permission: ${requiredPermission}`,
+        requiredPermission,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+// Sanitize user for public/client responses - NEVER leak passwords, hashes, or secrets
 export function sanitizeUser(user: UserRecord) {
   return {
     id: user.id,
@@ -177,6 +247,10 @@ export function sanitizeUser(user: UserRecord) {
     name: user.name,
     role: user.role,
     status: user.status,
+    permissions: (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')
+      ? (user.role === 'SUPER_ADMIN' ? [...ADMIN_PERMISSIONS] : (user.permissions || [...ADMIN_PERMISSIONS]))
+      : undefined,
+    mfaEnabled: !!user.mfaEnabled,
     avatarUrl: user.avatarUrl,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

@@ -34,7 +34,7 @@ export const InstructorLoginPage: React.FC<InstructorLoginPageProps> = ({ onNavi
 
     try {
       await loginInstructor(email, password);
-      onNavigate('/admin-portal');
+      onNavigate('/instructor/portal');
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed.');
       if (err.data?.correctPortal) {
@@ -183,10 +183,10 @@ export const InstructorLoginPage: React.FC<InstructorLoginPageProps> = ({ onNavi
             </button>
             <span>•</span>
             <button
-              onClick={() => onNavigate('/admin/login')}
+              onClick={() => onNavigate('/courses')}
               className="hover:text-amber-400 transition-colors"
             >
-              System Administrator Login
+              Browse Courses
             </button>
           </div>
         </div>

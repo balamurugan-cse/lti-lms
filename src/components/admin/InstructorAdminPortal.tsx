@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLMS } from '../../context/LMSContext';
 import { api } from '../../services/api';
+import { AdminSecurityCenter } from './AdminSecurityCenter';
+import { UserRbacManager } from './UserRbacManager';
+import { ProtectedAdminRoute } from '../auth/ProtectedAdminRoute';
 import {
   Shield,
   Users,
@@ -20,10 +23,19 @@ import {
   GraduationCap,
   RefreshCw,
   Video,
+  Smartphone,
 } from 'lucide-react';
 import { Role } from '../../types';
 
-export const InstructorAdminPortal: React.FC = () => {
+export interface InstructorAdminPortalProps {
+  portalMode?: 'ADMIN' | 'INSTRUCTOR';
+  initialTab?: 'overview' | 'builder' | 'rbac' | 'security' | 'audit' | 'apis';
+}
+
+export const InstructorAdminPortal: React.FC<InstructorAdminPortalProps> = ({
+  portalMode = 'ADMIN',
+  initialTab,
+}) => {
   const {
     currentUser,
     courses,
@@ -36,8 +48,12 @@ export const InstructorAdminPortal: React.FC = () => {
     navigate,
   } = useLMS();
 
-  // Tabs: 'overview' | 'builder' | 'rbac' | 'audit' | 'apis'
-  const [activeTab, setActiveTab] = useState<'overview' | 'builder' | 'rbac' | 'audit' | 'apis'>('overview');
+  // Tabs: 'overview' | 'builder' | 'rbac' | 'security' | 'audit' | 'apis'
+  const [activeTab, setActiveTab] = useState<'overview' | 'builder' | 'rbac' | 'security' | 'audit' | 'apis'>(() => {
+    if (initialTab) return initialTab;
+    if (portalMode === 'INSTRUCTOR' || currentUser?.role === 'INSTRUCTOR') return 'builder';
+    return 'overview';
+  });
 
   // Real data state from backend
   const [realUsers, setRealUsers] = useState<any[]>([]);
@@ -129,26 +145,22 @@ export const InstructorAdminPortal: React.FC = () => {
   }, [currentUser]);
 
   // Check RBAC Permissions
-  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'INSTRUCTOR')) {
+  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'INSTRUCTOR')) {
     return (
-      <div className="py-20 text-center max-w-xl mx-auto space-y-4">
-        <Shield className="w-12 h-12 text-amber-400 mx-auto" />
-        <h2 className="text-2xl font-extrabold text-white">Privileged Access Required</h2>
-        <p className="text-xs text-slate-300 leading-relaxed">
-          The Administrative & Faculty Portal requires verified INSTRUCTOR or ADMIN authentication claims. Students and unauthenticated visitors cannot access this console.
+      <div className="py-24 text-center max-w-lg mx-auto space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto text-rose-400">
+          <Lock className="w-7 h-7" />
+        </div>
+        <h2 className="text-2xl font-extrabold text-white">403 — Access Restricted</h2>
+        <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
+          Administrative and faculty management services are strictly restricted to verified personnel. Your current session does not possess the required clearance.
         </p>
-        <div className="flex items-center justify-center gap-3 pt-2">
+        <div className="pt-3">
           <button
-            onClick={() => navigate('/instructor/login')}
-            className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300"
+            onClick={() => navigate('/dashboard')}
+            className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700 hover:bg-slate-700 transition-colors"
           >
-            Faculty Sign In
-          </button>
-          <button
-            onClick={() => navigate('/admin/login')}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700 hover:bg-slate-700"
-          >
-            Admin Sign In
+            ← Return to Learner Dashboard
           </button>
         </div>
       </div>
@@ -283,7 +295,12 @@ export const InstructorAdminPortal: React.FC = () => {
         {[
           { id: 'overview', label: 'Platform Metrics', icon: Activity },
           { id: 'builder', label: 'Curriculum & Course Builder', icon: Layers },
-          { id: 'rbac', label: `User Registry (${stats.totalUsers})`, icon: Users },
+          ...((currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN')
+            ? [
+                { id: 'rbac', label: `User Registry & RBAC (${stats.totalUsers})`, icon: Users },
+                { id: 'security', label: 'Security & 2FA Sessions', icon: Smartphone },
+              ]
+            : []),
           { id: 'audit', label: `Audit Trail (${auditLogs.length})`, icon: Shield },
           { id: 'apis', label: 'API Specifications', icon: Server },
         ].map((tab) => {
@@ -619,84 +636,21 @@ export const InstructorAdminPortal: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 3: User Registry */}
+      {/* Tab 3: User Registry & Granular RBAC */}
       {activeTab === 'rbac' && (
-        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-white">
-                Live User Registry & Authentication Claims
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Real users authenticated and stored in production backend with Argon2id password hashes.
-              </p>
-            </div>
-            <button
-              onClick={loadAdminData}
-              className="text-xs text-amber-400 hover:underline flex items-center gap-1"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Refresh
-            </button>
-          </div>
-
-          {currentUser.role !== 'ADMIN' ? (
-            <div className="p-8 rounded-xl bg-slate-950 border border-slate-800 text-center">
-              <KeyRound className="w-10 h-10 text-amber-400 mx-auto mb-2" />
-              <h4 className="text-sm font-bold text-white">Administrator Role Required</h4>
-              <p className="text-xs text-slate-400 mt-1">
-                Full user directory inspection is restricted to ADMIN accounts to protect student data privacy.
-              </p>
-            </div>
-          ) : isLoadingUsers ? (
-            <div className="py-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-              <span className="w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping" />
-              Loading real user registry from backend...
-            </div>
-          ) : realUsers.length === 0 ? (
-            <div className="p-8 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-400">
-              No registered users in the database yet.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left text-slate-300 border border-slate-800 rounded-xl overflow-hidden">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-mono">
-                  <tr>
-                    <th className="p-3">User Name</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3">Role</th>
-                    <th className="p-3">Joined Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 bg-slate-950/40">
-                  {realUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-900/50">
-                      <td className="p-3 font-semibold text-white">{u.name}</td>
-                      <td className="p-3 text-slate-400 font-mono">{u.email}</td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold ${
-                            u.role === 'ADMIN'
-                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                              : u.role === 'INSTRUCTOR'
-                              ? 'bg-amber-400/20 text-amber-400 border border-amber-400/30'
-                              : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                          }`}
-                        >
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="p-3 text-slate-400">{u.joinedDate || u.createdAt || 'Recent'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <ProtectedAdminRoute requiredRoles={['ADMIN', 'SUPER_ADMIN']} requiredPermissions={['USER_MANAGE']}>
+          <UserRbacManager />
+        </ProtectedAdminRoute>
       )}
 
-      {/* Tab 4: Security Audit Trail */}
+      {/* Tab 4: Security & 2FA Sessions Center */}
+      {activeTab === 'security' && (
+        <ProtectedAdminRoute requiredRoles={['ADMIN', 'SUPER_ADMIN']} requiredPermissions={['SECURITY_MANAGE']}>
+          <AdminSecurityCenter />
+        </ProtectedAdminRoute>
+      )}
+
+      {/* Tab 5: Security Audit Trail */}
       {activeTab === 'audit' && (
         <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
           <div className="flex items-center justify-between">

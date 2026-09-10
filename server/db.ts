@@ -1,6 +1,27 @@
 import fs from 'fs';
 import path from 'path';
 
+export const ADMIN_PERMISSIONS = [
+  'USER_VIEW',
+  'USER_CREATE',
+  'USER_UPDATE',
+  'USER_SUSPEND',
+  'COURSE_VIEW',
+  'COURSE_CREATE',
+  'COURSE_UPDATE',
+  'COURSE_DELETE',
+  'COURSE_PUBLISH',
+  'ENROLLMENT_VIEW',
+  'ENROLLMENT_CREATE',
+  'ENROLLMENT_UPDATE',
+  'REPORT_VIEW',
+  'AUDIT_LOG_VIEW',
+  'SYSTEM_SETTINGS_VIEW',
+  'SYSTEM_SETTINGS_UPDATE',
+] as const;
+
+export type AdminPermission = typeof ADMIN_PERMISSIONS[number];
+
 export interface UserRecord {
   id: string;
   email: string;
@@ -8,6 +29,10 @@ export interface UserRecord {
   name: string;
   role: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN' | 'SUPER_ADMIN';
   status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED' | 'DEACTIVATED';
+  permissions?: string[];
+  mfaEnabled?: boolean;
+  mfaSecret?: string;
+  mfaRecoveryCodes?: string[];
   avatarUrl?: string;
   failedLoginCount: number;
   lockedUntil?: string | null;
@@ -163,6 +188,9 @@ export interface EnrollmentRecord {
   userId: string;
   courseId: string;
   enrolledAt: string;
+  status?: 'ACTIVE' | 'COMPLETED' | 'DROPPED';
+  completionPercentage?: number;
+  completedAt?: string | null;
 }
 
 export interface LessonProgressRecord {
@@ -241,8 +269,20 @@ export interface RefreshSessionRecord {
   refreshTokenHash: string;
   familyId: string;
   isRevoked: boolean;
+  device?: string;
+  ipAddress?: string;
+  lastActiveAt?: string;
   expiresAt: string;
   createdAt: string;
+}
+
+export interface SystemSettingsRecord {
+  institutionName: string;
+  allowSelfRegistration: boolean;
+  sessionTimeoutMinutes: number;
+  mfaEnforcedForAdmins: boolean;
+  maintenanceMode: boolean;
+  updatedAt: string;
 }
 
 export interface DatabaseState {
@@ -267,6 +307,7 @@ export interface DatabaseState {
   discussions: DiscussionRecord[];
   auditLogs: AuditLogRecord[];
   refreshSessions: RefreshSessionRecord[];
+  systemSettings: SystemSettingsRecord;
 }
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -295,6 +336,14 @@ function getInitialEmptyDatabase(): DatabaseState {
     discussions: [],
     auditLogs: [],
     refreshSessions: [],
+    systemSettings: {
+      institutionName: 'LTI Tech / EduTech LMS',
+      allowSelfRegistration: true,
+      sessionTimeoutMinutes: 30,
+      mfaEnforcedForAdmins: false,
+      maintenanceMode: false,
+      updatedAt: new Date().toISOString(),
+    },
   };
 }
 

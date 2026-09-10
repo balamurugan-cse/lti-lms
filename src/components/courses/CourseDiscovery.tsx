@@ -146,26 +146,37 @@ export const CourseDiscovery: React.FC = () => {
           <p className="text-xs text-slate-400 mt-2 leading-relaxed">
             The LMS database is in a clean production state with zero mock data. Faculty members or curriculum administrators can publish courses via the portal.
           </p>
-          {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'INSTRUCTOR') ? (
+          {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') ? (
             <button
               onClick={() => navigate('/admin-portal')}
-              className="mt-6 px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 shadow-md transition-all"
+              className="mt-6 px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 shadow-md transition-all inline-flex items-center gap-2"
             >
-              Go to Faculty & Admin Console to Create Course
+              Open Admin Console to Publish Course
             </button>
+          ) : currentUser && currentUser.role === 'INSTRUCTOR' ? (
+            <button
+              onClick={() => navigate('/instructor-portal')}
+              className="mt-6 px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 shadow-md transition-all inline-flex items-center gap-2"
+            >
+              Open Faculty Portal to Create Course
+            </button>
+          ) : currentUser && currentUser.role === 'STUDENT' ? (
+            <p className="mt-4 text-xs text-slate-400 italic">
+              New courses will appear here once published by faculty.
+            </p>
           ) : (
             <div className="mt-6 flex items-center justify-center gap-3">
               <button
-                onClick={() => navigate('/instructor/login')}
-                className="px-4 py-2 rounded-lg bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300"
+                onClick={() => navigate('/student/login')}
+                className="px-4 py-2 rounded-lg bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 transition-colors"
               >
-                Faculty Sign In
+                Sign In
               </button>
               <button
-                onClick={() => navigate('/admin/login')}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700 hover:bg-slate-700"
+                onClick={() => navigate('/instructor/login')}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-slate-300 font-semibold text-xs border border-slate-800 hover:text-white transition-colors"
               >
-                Admin Sign In
+                Faculty Sign In
               </button>
             </div>
           )}

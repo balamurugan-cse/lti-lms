@@ -1,4 +1,4 @@
-export type Role = 'STUDENT' | 'INSTRUCTOR' | 'ADMIN';
+export type Role = 'STUDENT' | 'INSTRUCTOR' | 'ADMIN' | 'SUPER_ADMIN';
 
 export type CourseLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 
@@ -13,6 +13,9 @@ export interface User {
   title?: string;
   studentId?: string;
   joinedDate: string;
+  permissions?: string[];
+  mfaEnabled?: boolean;
+  status?: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' | 'PENDING_VERIFICATION';
 }
 
 export interface LessonResource {

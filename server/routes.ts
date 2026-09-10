@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { db, UserRecord } from './db';
+import { db, UserRecord, AdminPermission, ADMIN_PERMISSIONS } from './db';
 import {
   hashPassword,
   comparePassword,
@@ -11,9 +11,16 @@ import {
   clearLoginRateLimit,
   authenticateToken,
   requireRole,
+  requirePermission,
   sanitizeUser,
   AuthenticatedRequest,
 } from './auth';
+import {
+  verifyTOTP,
+  generateBase32Secret,
+  generateRecoveryCodes,
+  getOtpAuthUri,
+} from './totp';
 
 export const apiRouter = Router();
 
@@ -310,8 +317,8 @@ async function handleRoleLogin(
   const user = db.read().users.find((u) => u.email === cleanEmail);
 
   if (!user) {
-    db.addAuditLog('LOGIN_FAILED_NO_USER', `Failed login attempt for nonexistent user ${cleanEmail}`, ip, 'FAILURE');
-    res.status(401).json({ error: 'Invalid credentials. Check email and password.' });
+    db.addAuditLog('LOGIN_FAILED_NO_USER', `Failed login attempt for nonexistent user ${cleanEmail} on ${portalName} Portal`, ip, 'FAILURE');
+    res.status(401).json({ error: 'Invalid credentials.' });
     return;
   }
 
@@ -328,11 +335,11 @@ async function handleRoleLogin(
       if (u) u.failedLoginCount += 1;
     });
     db.addAuditLog('LOGIN_FAILED_CREDENTIALS', `Invalid password entered for ${cleanEmail}`, ip, 'FAILURE', user.id);
-    res.status(401).json({ error: 'Invalid credentials. Check email and password.' });
+    res.status(401).json({ error: 'Invalid credentials.' });
     return;
   }
 
-  // Strict Role Checking: Student portal requires STUDENT; Instructor portal requires INSTRUCTOR, Admin requires ADMIN
+  // Strict Role Checking: Prevent privilege escalation or cross-portal confusion
   if (!expectedRoles.includes(user.role)) {
     db.addAuditLog(
       'LOGIN_WRONG_PORTAL',
@@ -341,11 +348,58 @@ async function handleRoleLogin(
       'WARNING',
       user.id
     );
+    // Never advertise Admin portal or reveal administrator role on public portals
+    if (portalName === 'Admin') {
+      res.status(401).json({ error: 'Invalid credentials.' });
+      return;
+    }
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      res.status(401).json({ error: `Invalid credentials for ${portalName} Portal.` });
+      return;
+    }
     res.status(403).json({
       error: `Portal mismatch: This account has role '${user.role}' and cannot log in through the ${portalName} Portal.`,
-      correctPortal: user.role === 'ADMIN' ? '/admin/login' : user.role === 'INSTRUCTOR' ? '/instructor/login' : '/student/login',
+      correctPortal: user.role === 'INSTRUCTOR' ? '/instructor/login' : '/student/login',
     });
     return;
+  }
+
+  // MFA Evaluation for Admin users
+  if ((user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') && user.mfaEnabled && user.mfaSecret) {
+    const { mfaCode } = req.body;
+    if (!mfaCode) {
+      res.json({
+        mfaRequired: true,
+        message: 'Multi-factor authentication code required.',
+        email: user.email,
+      });
+      return;
+    }
+
+    const isTotpValid = verifyTOTP(mfaCode, user.mfaSecret);
+    let isRecoveryCodeValid = false;
+
+    if (!isTotpValid && user.mfaRecoveryCodes && user.mfaRecoveryCodes.length > 0) {
+      const cleanCode = mfaCode.trim().toUpperCase();
+      const codeIndex = user.mfaRecoveryCodes.indexOf(cleanCode);
+      if (codeIndex !== -1) {
+        isRecoveryCodeValid = true;
+        // Consume single-use recovery code
+        db.update((draft) => {
+          const u = draft.users.find((usr) => usr.id === user.id);
+          if (u && u.mfaRecoveryCodes) {
+            u.mfaRecoveryCodes.splice(codeIndex, 1);
+          }
+        });
+        db.addAuditLog('MFA_RECOVERY_CODE_USED', `Admin ${cleanEmail} logged in with recovery code`, ip, 'WARNING', user.id);
+      }
+    }
+
+    if (!isTotpValid && !isRecoveryCodeValid) {
+      db.addAuditLog('MFA_VERIFY_FAILED', `Invalid MFA code attempt for ${cleanEmail}`, ip, 'FAILURE', user.id);
+      res.status(401).json({ error: 'Invalid two-factor authentication code or recovery code.' });
+      return;
+    }
   }
 
   // Reset rate limiting and failed count
@@ -364,6 +418,8 @@ async function handleRoleLogin(
   const refreshToken = generateRefreshToken(user, familyId);
 
   const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  const userAgent = (req.headers['user-agent'] || 'Unknown Browser/Device') as string;
+
   db.update((draft) => {
     draft.refreshSessions.push({
       id: crypto.randomUUID(),
@@ -371,6 +427,9 @@ async function handleRoleLogin(
       refreshTokenHash,
       familyId,
       isRevoked: false,
+      device: userAgent,
+      ipAddress: ip,
+      lastActiveAt: now,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       createdAt: now,
     });
@@ -465,7 +524,7 @@ apiRouter.post('/auth/refresh', async (req: Request, res: Response) => {
   });
 });
 
-// Logout
+// Logout Current Session
 apiRouter.post('/auth/logout', (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (refreshToken) {
@@ -476,6 +535,31 @@ apiRouter.post('/auth/logout', (req: Request, res: Response) => {
     });
   }
   res.json({ message: 'Session logged out successfully.' });
+});
+
+// Logout From All Sessions (Invalidates all active tokens/sessions for the user)
+apiRouter.post('/auth/logout-all', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const ip = getClientIp(req);
+
+  db.update((draft) => {
+    draft.refreshSessions.forEach((s) => {
+      if (s.userId === userId) {
+        s.isRevoked = true;
+      }
+    });
+  });
+
+  db.addAuditLog(
+    'LOGOUT_ALL_SESSIONS',
+    `User ${req.user!.email} invalidated all active sessions across all devices`,
+    ip,
+    'SUCCESS',
+    userId,
+    req.user!.email
+  );
+
+  res.json({ message: 'All active sessions across all devices have been successfully revoked.' });
 });
 
 // Current User Session Claims
@@ -1159,7 +1243,7 @@ apiRouter.get('/certificates/verify/:hash', (req: Request, res: Response) => {
 apiRouter.get(
   '/admin/stats',
   authenticateToken,
-  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  requirePermission('REPORT_VIEW'),
   (req: AuthenticatedRequest, res: Response) => {
     const data = db.read();
     res.json({
@@ -1172,6 +1256,7 @@ apiRouter.get(
       submissionsCount: data.assignmentSubmissions.length,
       quizzesTakenCount: data.quizAttempts.length,
       auditLogsCount: data.auditLogs.length,
+      activeSessionsCount: data.refreshSessions.filter((s) => !s.isRevoked).length,
     });
   }
 );
@@ -1180,10 +1265,85 @@ apiRouter.get(
 apiRouter.get(
   '/admin/users',
   authenticateToken,
-  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  requirePermission('USER_VIEW'),
   (req: AuthenticatedRequest, res: Response) => {
     const users = db.read().users.map((u) => sanitizeUser(u));
     res.json({ users });
+  }
+);
+
+// Create User (Admin Direct Provisioning)
+apiRouter.post(
+  '/admin/users',
+  authenticateToken,
+  requirePermission('USER_CREATE'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { name, email, password, role, permissions } = req.body;
+    if (!name || !email || !password || !role) {
+      res.status(400).json({ error: 'Name, email, password, and role are required.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = db.read().users.find((u) => u.email === cleanEmail);
+    if (existing) {
+      res.status(409).json({ error: 'An account with this email already exists.' });
+      return;
+    }
+
+    if (password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters.' });
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+    const now = new Date().toISOString();
+    const newUserId = `usr-${crypto.randomUUID()}`;
+
+    const newUser: UserRecord = {
+      id: newUserId,
+      name: name.trim(),
+      email: cleanEmail,
+      passwordHash,
+      role,
+      status: 'ACTIVE',
+      permissions: role === 'ADMIN' ? (permissions || [...ADMIN_PERMISSIONS]) : undefined,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      lastLoginAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    db.update((draft) => {
+      draft.users.push(newUser);
+      if (role === 'STUDENT') {
+        draft.studentProfiles.push({
+          id: `stu-${crypto.randomUUID()}`,
+          userId: newUserId,
+          studentId: `LTI-STU-${Math.floor(100000 + Math.random() * 900000)}`,
+          createdAt: now,
+        });
+      } else if (role === 'INSTRUCTOR') {
+        draft.instructorProfiles.push({
+          id: `inst-${crypto.randomUUID()}`,
+          userId: newUserId,
+          instructorId: `LTI-FAC-${Math.floor(1000 + Math.random() * 9000)}`,
+          createdAt: now,
+        });
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_USER_PROVISIONED',
+      `Admin ${req.user!.email} provisioned user ${cleanEmail} as role ${role}`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.status(201).json({ user: sanitizeUser(newUser) });
   }
 );
 
@@ -1191,7 +1351,7 @@ apiRouter.get(
 apiRouter.patch(
   '/admin/users/:id/role',
   authenticateToken,
-  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  requirePermission('USER_UPDATE'),
   (req: AuthenticatedRequest, res: Response) => {
     const targetUserId = req.params.id;
     const { role } = req.body;
@@ -1205,6 +1365,9 @@ apiRouter.patch(
       const u = draft.users.find((user) => user.id === targetUserId);
       if (u) {
         u.role = role;
+        if (role === 'ADMIN' && (!u.permissions || u.permissions.length === 0)) {
+          u.permissions = [...ADMIN_PERMISSIONS];
+        }
         u.updatedAt = new Date().toISOString();
       }
     });
@@ -1222,13 +1385,657 @@ apiRouter.patch(
   }
 );
 
-// Audit Logs Stream
+// Update Granular Admin Permissions
+apiRouter.patch(
+  '/admin/users/:id/permissions',
+  authenticateToken,
+  requirePermission('USER_UPDATE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const targetUserId = req.params.id;
+    const { permissions } = req.body;
+
+    if (!Array.isArray(permissions)) {
+      res.status(400).json({ error: 'Permissions must be provided as an array.' });
+      return;
+    }
+
+    const invalid = permissions.filter((p: string) => !ADMIN_PERMISSIONS.includes(p as any));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: `Invalid permissions detected: ${invalid.join(', ')}` });
+      return;
+    }
+
+    db.update((draft) => {
+      const u = draft.users.find((user) => user.id === targetUserId);
+      if (u) {
+        u.permissions = permissions;
+        u.updatedAt = new Date().toISOString();
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_PERMISSIONS_MUTATION',
+      `Admin ${req.user!.email} updated permissions for user ${targetUserId} (${permissions.length} granted)`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'Admin permissions updated successfully.', permissions });
+  }
+);
+
+// Update User Status (Activate, Suspend, Deactivate)
+apiRouter.patch(
+  '/admin/users/:id/status',
+  authenticateToken,
+  requirePermission('USER_SUSPEND'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const targetUserId = req.params.id;
+    const { status } = req.body;
+
+    if (!['ACTIVE', 'SUSPENDED', 'DEACTIVATED', 'PENDING_VERIFICATION'].includes(status)) {
+      res.status(400).json({ error: 'Invalid status specified.' });
+      return;
+    }
+
+    // Protect against self-suspension of currently authenticated admin
+    if (targetUserId === req.user!.userId && status !== 'ACTIVE') {
+      res.status(400).json({ error: 'Administrators cannot suspend their own active account.' });
+      return;
+    }
+
+    db.update((draft) => {
+      const u = draft.users.find((user) => user.id === targetUserId);
+      if (u) {
+        u.status = status;
+        u.updatedAt = new Date().toISOString();
+      }
+      // If suspending, revoke active sessions
+      if (status === 'SUSPENDED' || status === 'DEACTIVATED') {
+        draft.refreshSessions.forEach((s) => {
+          if (s.userId === targetUserId) s.isRevoked = true;
+        });
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_USER_STATUS_MUTATION',
+      `Admin ${req.user!.email} set user ${targetUserId} status to ${status}`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ message: `User status changed to ${status}.` });
+  }
+);
+
+// Delete User Account
+apiRouter.delete(
+  '/admin/users/:id',
+  authenticateToken,
+  requirePermission('USER_SUSPEND'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const targetUserId = req.params.id;
+
+    if (targetUserId === req.user!.userId) {
+      res.status(400).json({ error: 'Cannot delete your own administrator account.' });
+      return;
+    }
+
+    db.update((draft) => {
+      draft.users = draft.users.filter((u) => u.id !== targetUserId);
+      draft.studentProfiles = draft.studentProfiles.filter((p) => p.userId !== targetUserId);
+      draft.instructorProfiles = draft.instructorProfiles.filter((p) => p.userId !== targetUserId);
+      draft.refreshSessions.forEach((s) => {
+        if (s.userId === targetUserId) s.isRevoked = true;
+      });
+    });
+
+    db.addAuditLog(
+      'ADMIN_USER_DELETED',
+      `Admin ${req.user!.email} permanently deleted user ${targetUserId}`,
+      getClientIp(req),
+      'WARNING',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'User account removed.' });
+  }
+);
+
+// Admin Courses Directory
+apiRouter.get(
+  '/admin/courses',
+  authenticateToken,
+  requirePermission('COURSE_VIEW'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const courses = db.read().courses;
+    res.json({ courses });
+  }
+);
+
+// Admin Publish / Archive Course Status
+apiRouter.patch(
+  '/admin/courses/:id/status',
+  authenticateToken,
+  requirePermission('COURSE_PUBLISH'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const courseId = req.params.id;
+    const { status } = req.body; // 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
+    if (!['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) {
+      res.status(400).json({ error: 'Invalid course status.' });
+      return;
+    }
+
+    db.update((draft) => {
+      const c = draft.courses.find((course) => course.id === courseId);
+      if (c) {
+        c.status = status;
+        c.updatedAt = new Date().toISOString();
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_COURSE_STATUS_MUTATION',
+      `Admin ${req.user!.email} set course ${courseId} status to ${status}`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ message: `Course status updated to ${status}.` });
+  }
+);
+
+// Admin Delete Course
+apiRouter.delete(
+  '/admin/courses/:id',
+  authenticateToken,
+  requirePermission('COURSE_DELETE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const courseId = req.params.id;
+    db.update((draft) => {
+      draft.courses = draft.courses.filter((c) => c.id !== courseId);
+      draft.courseModules = draft.courseModules.filter((m) => m.courseId !== courseId);
+      draft.enrollments = draft.enrollments.filter((e) => e.courseId !== courseId);
+    });
+
+    db.addAuditLog(
+      'ADMIN_COURSE_DELETED',
+      `Admin ${req.user!.email} deleted course ${courseId}`,
+      getClientIp(req),
+      'WARNING',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'Course and related assets removed.' });
+  }
+);
+
+// Admin Enrollments Directory
+apiRouter.get(
+  '/admin/enrollments',
+  authenticateToken,
+  requirePermission('ENROLLMENT_VIEW'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const enrollments = db.read().enrollments.map((enr) => {
+      const student = db.read().users.find((u) => u.id === enr.userId);
+      const course = db.read().courses.find((c) => c.id === enr.courseId);
+      return {
+        ...enr,
+        studentName: student?.name || 'Unknown Student',
+        studentEmail: student?.email || 'N/A',
+        courseTitle: course?.title || 'Unknown Course',
+        courseCode: course?.code || 'N/A',
+      };
+    });
+    res.json({ enrollments });
+  }
+);
+
+// Admin Enroll Student
+apiRouter.post(
+  '/admin/enrollments',
+  authenticateToken,
+  requirePermission('ENROLLMENT_CREATE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { userId, courseId } = req.body;
+    if (!userId || !courseId) {
+      res.status(400).json({ error: 'userId and courseId are required.' });
+      return;
+    }
+
+    const existing = db.read().enrollments.find((e) => e.userId === userId && e.courseId === courseId);
+    if (existing) {
+      res.status(409).json({ error: 'Student is already enrolled in this course.' });
+      return;
+    }
+
+    const newEnr = {
+      id: `enr-${crypto.randomUUID()}`,
+      userId,
+      courseId,
+      enrolledAt: new Date().toISOString(),
+      status: 'ACTIVE' as const,
+      completionPercentage: 0,
+      completedAt: null,
+    };
+
+    db.update((draft) => {
+      draft.enrollments.push(newEnr);
+    });
+
+    db.addAuditLog(
+      'ADMIN_ENROLLMENT_CREATED',
+      `Admin ${req.user!.email} enrolled student ${userId} into course ${courseId}`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.status(201).json({ enrollment: newEnr });
+  }
+);
+
+// Admin Delete Enrollment
+apiRouter.delete(
+  '/admin/enrollments/:id',
+  authenticateToken,
+  requirePermission('ENROLLMENT_UPDATE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const enrollmentId = req.params.id;
+    db.update((draft) => {
+      draft.enrollments = draft.enrollments.filter((e) => e.id !== enrollmentId);
+    });
+
+    res.json({ message: 'Enrollment removed.' });
+  }
+);
+
+// Admin Categories
+apiRouter.get(
+  '/admin/categories',
+  authenticateToken,
+  requirePermission('COURSE_VIEW'),
+  (req: AuthenticatedRequest, res: Response) => {
+    res.json({ categories: db.read().courseCategories });
+  }
+);
+
+apiRouter.post(
+  '/admin/categories',
+  authenticateToken,
+  requirePermission('COURSE_CREATE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { name, description } = req.body;
+    if (!name) {
+      res.status(400).json({ error: 'Category name is required.' });
+      return;
+    }
+
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const newCat = {
+      id: `cat-${crypto.randomUUID()}`,
+      name: name.trim(),
+      slug,
+      description: description || '',
+      createdAt: new Date().toISOString(),
+    };
+
+    db.update((draft) => {
+      draft.courseCategories.push(newCat);
+    });
+
+    res.status(201).json({ category: newCat });
+  }
+);
+
+apiRouter.delete(
+  '/admin/categories/:id',
+  authenticateToken,
+  requirePermission('COURSE_DELETE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const catId = req.params.id;
+    db.update((draft) => {
+      draft.courseCategories = draft.courseCategories.filter((c) => c.id !== catId);
+    });
+    res.json({ message: 'Category removed.' });
+  }
+);
+
+// Admin Audit Logs Stream
 apiRouter.get(
   '/admin/audit-logs',
   authenticateToken,
-  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  requirePermission('AUDIT_LOG_VIEW'),
   (req: AuthenticatedRequest, res: Response) => {
     const logs = db.read().auditLogs;
     res.json({ auditLogs: logs });
+  }
+);
+
+// Admin Reports Overview
+apiRouter.get(
+  '/admin/reports/overview',
+  authenticateToken,
+  requirePermission('REPORT_VIEW'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const data = db.read();
+    const totalEnrollments = data.enrollments.length;
+    const completedEnrollments = data.enrollments.filter((e) => (e.completionPercentage || 0) >= 100).length;
+    const avgCompletion = totalEnrollments > 0
+      ? Math.round(data.enrollments.reduce((acc, e) => acc + (e.completionPercentage || 0), 0) / totalEnrollments)
+      : 0;
+
+    const quizAttempts = data.quizAttempts;
+    const passedQuizzes = quizAttempts.filter((q) => q.passed).length;
+    const quizPassRate = quizAttempts.length > 0 ? Math.round((passedQuizzes / quizAttempts.length) * 100) : 0;
+
+    res.json({
+      totalEnrollments,
+      completedEnrollments,
+      avgCompletionPercentage: avgCompletion,
+      totalCertificatesIssued: data.certificates.length,
+      quizAttemptsCount: quizAttempts.length,
+      quizPassRate,
+      submissionsCount: data.assignmentSubmissions.length,
+      gradedSubmissionsCount: data.assignmentSubmissions.filter((s) => s.status === 'GRADED').length,
+    });
+  }
+);
+
+// System Settings
+apiRouter.get(
+  '/admin/settings',
+  authenticateToken,
+  requirePermission('SYSTEM_SETTINGS_VIEW'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const state = db.read();
+    res.json({
+      settings: state.systemSettings || {
+        institutionName: 'LTI Tech / EduTech LMS',
+        allowSelfRegistration: true,
+        sessionTimeoutMinutes: 30,
+        mfaEnforcedForAdmins: false,
+        maintenanceMode: false,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }
+);
+
+apiRouter.patch(
+  '/admin/settings',
+  authenticateToken,
+  requirePermission('SYSTEM_SETTINGS_UPDATE'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const updates = req.body;
+    db.update((draft) => {
+      draft.systemSettings = {
+        ...draft.systemSettings,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    db.addAuditLog(
+      'SYSTEM_SETTINGS_UPDATED',
+      `Admin ${req.user!.email} updated system settings`,
+      getClientIp(req),
+      'SUCCESS',
+      req.user!.userId,
+      req.user!.email
+    );
+
+    res.json({ settings: db.read().systemSettings });
+  }
+);
+
+/* =========================================================================
+   8. ADMIN SECURITY CENTER APIS (/admin/security)
+   ========================================================================= */
+
+// Security Center Overview
+apiRouter.get(
+  '/admin/security/overview',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const user = db.read().users.find((u) => u.id === userId);
+    if (!user) {
+      res.status(404).json({ error: 'Administrator record not found.' });
+      return;
+    }
+
+    const allSessions = db.read().refreshSessions.filter((s) => s.userId === userId && !s.isRevoked);
+    const activeSessions = allSessions.map((s) => ({
+      id: s.id,
+      device: s.device || 'Web Browser',
+      ipAddress: s.ipAddress || '127.0.0.1',
+      createdAt: s.createdAt,
+      lastActiveAt: s.lastActiveAt || s.createdAt,
+      expiresAt: s.expiresAt,
+    }));
+
+    const recentSecurityEvents = db.read().auditLogs
+      .filter((l) => l.userId === userId || l.action.startsWith('ADMIN') || l.action.startsWith('RBAC') || l.status === 'WARNING' || l.status === 'FAILURE')
+      .slice(-20)
+      .reverse();
+
+    res.json({
+      currentAdmin: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        permissions: user.role === 'SUPER_ADMIN' ? [...ADMIN_PERMISSIONS] : (user.permissions || [...ADMIN_PERMISSIONS]),
+        lastLoginAt: user.lastLoginAt,
+        mfaEnabled: !!user.mfaEnabled,
+      },
+      currentSession: {
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || 'Browser Session',
+      },
+      activeSessions,
+      recentSecurityEvents,
+      failedLoginCount: user.failedLoginCount || 0,
+      passwordPolicy: {
+        algorithm: 'bcrypt (salt rounds: 10)',
+        minimumLength: 8,
+        complexityRequired: true,
+      },
+    });
+  }
+);
+
+// Revoke Specific Admin Session
+apiRouter.delete(
+  '/admin/security/sessions/:id',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  (req: AuthenticatedRequest, res: Response) => {
+    const sessionId = req.params.id;
+    const userId = req.user!.userId;
+
+    db.update((draft) => {
+      const session = draft.refreshSessions.find((s) => s.id === sessionId && s.userId === userId);
+      if (session) {
+        session.isRevoked = true;
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_SESSION_REVOKED',
+      `Admin ${req.user!.email} manually terminated session ${sessionId}`,
+      getClientIp(req),
+      'SUCCESS',
+      userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'Session successfully revoked.' });
+  }
+);
+
+// Revoke All Sessions For This Admin
+apiRouter.post(
+  '/admin/security/revoke-all-sessions',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user!.userId;
+    db.update((draft) => {
+      draft.refreshSessions.forEach((s) => {
+        if (s.userId === userId) s.isRevoked = true;
+      });
+    });
+
+    db.addAuditLog(
+      'ADMIN_ALL_SESSIONS_REVOKED',
+      `Admin ${req.user!.email} terminated all active sessions across all devices`,
+      getClientIp(req),
+      'WARNING',
+      userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'All active sessions have been invalidated.' });
+  }
+);
+
+// Prepare MFA Setup: Generate Secret, Recovery Codes & OTPAuth URI
+apiRouter.post(
+  '/admin/security/mfa/setup',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const user = db.read().users.find((u) => u.id === userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    const secret = generateBase32Secret();
+    const recoveryCodes = generateRecoveryCodes(8);
+    const otpAuthUri = getOtpAuthUri(user.email, 'LTI EduTech LMS', secret);
+
+    // Save provisioned secret temporarily (will be activated upon verification)
+    db.update((draft) => {
+      const u = draft.users.find((usr) => usr.id === userId);
+      if (u) {
+        u.mfaSecret = secret;
+        u.mfaRecoveryCodes = recoveryCodes;
+      }
+    });
+
+    res.json({
+      secret,
+      otpAuthUri,
+      recoveryCodes,
+      instructions: 'Enter this secret key or scan the OTPAuth URI in your Authenticator app (Google Authenticator, Microsoft Authenticator, 1Password), then submit a 6-digit code to activate.',
+    });
+  }
+);
+
+// Verify and Enable MFA
+apiRouter.post(
+  '/admin/security/mfa/verify',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const { token } = req.body;
+    const user = db.read().users.find((u) => u.id === userId);
+
+    if (!user || !user.mfaSecret) {
+      res.status(400).json({ error: 'MFA setup has not been initialized. Request setup first.' });
+      return;
+    }
+
+    const isValid = verifyTOTP(token, user.mfaSecret);
+    if (!isValid) {
+      res.status(400).json({ error: 'Invalid 6-digit verification code. Please ensure your device clock is synchronized.' });
+      return;
+    }
+
+    db.update((draft) => {
+      const u = draft.users.find((usr) => usr.id === userId);
+      if (u) {
+        u.mfaEnabled = true;
+        u.updatedAt = new Date().toISOString();
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_MFA_ACTIVATED',
+      `Admin ${req.user!.email} successfully activated Multi-Factor Authentication (TOTP)`,
+      getClientIp(req),
+      'SUCCESS',
+      userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'Multi-factor authentication has been successfully activated!' });
+  }
+);
+
+// Disable MFA (Requires Password Confirmation)
+apiRouter.post(
+  '/admin/security/mfa/disable',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const { password } = req.body;
+    const user = db.read().users.find((u) => u.id === userId);
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (!password) {
+      res.status(400).json({ error: 'Password confirmation is required to disable MFA.' });
+      return;
+    }
+
+    const validPassword = await comparePassword(password, user.passwordHash);
+    if (!validPassword) {
+      res.status(401).json({ error: 'Incorrect password.' });
+      return;
+    }
+
+    db.update((draft) => {
+      const u = draft.users.find((usr) => usr.id === userId);
+      if (u) {
+        u.mfaEnabled = false;
+        u.mfaSecret = undefined;
+        u.mfaRecoveryCodes = undefined;
+        u.updatedAt = new Date().toISOString();
+      }
+    });
+
+    db.addAuditLog(
+      'ADMIN_MFA_DISABLED',
+      `Admin ${req.user!.email} disabled Multi-Factor Authentication`,
+      getClientIp(req),
+      'WARNING',
+      userId,
+      req.user!.email
+    );
+
+    res.json({ message: 'Multi-factor authentication has been disabled.' });
   }
 );

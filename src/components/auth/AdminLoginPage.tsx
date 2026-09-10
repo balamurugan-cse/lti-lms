@@ -23,6 +23,8 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate }) =>
   const { loginAdmin } = useLMS();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [requireMfa, setRequireMfa] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -47,8 +49,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate }) =>
     setLoading(true);
 
     try {
-      await loginAdmin(email, password);
-      onNavigate('/admin-portal');
+      const res = await loginAdmin(email, password, requireMfa ? mfaCode.trim() : undefined);
+      if (res && res.mfaRequired) {
+        setRequireMfa(true);
+        setErrorMessage(null);
+      } else {
+        onNavigate('/admin/portal');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Administrative authentication failed.');
       if (err.data?.correctPortal) {
@@ -171,6 +178,32 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate }) =>
               </div>
             </div>
 
+            {requireMfa && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono font-bold text-amber-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    Two-Factor Authentication Code
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">TOTP / Recovery</span>
+                </div>
+                <input
+                  id="admin-login-mfa-input"
+                  type="text"
+                  required
+                  autoFocus
+                  maxLength={16}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder="e.g. 123456 or recovery code"
+                  className="w-full bg-slate-950 border border-amber-500/50 rounded-lg px-3 py-2 text-sm text-center tracking-widest font-mono text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Enter the 6-digit verification code from your authenticator app (Google Authenticator, Authy, 1Password) or an unconsumed recovery code.
+                </p>
+              </div>
+            )}
+
             <button
               id="admin-login-submit-btn"
               type="submit"
@@ -179,25 +212,32 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate }) =>
             >
               {loading ? (
                 <span>Verifying Privileged Session...</span>
+              ) : requireMfa ? (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Verify Code & Authenticate</span>
+                </>
               ) : (
                 <>
                   <KeyRound className="w-4 h-4" />
-                  <span>Authenticate to Root Console</span>
+                  <span>Authenticate to Administrative Console</span>
                 </>
               )}
             </button>
           </form>
 
-          {/* First time setup option */}
-          <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-            <button
-              onClick={() => onNavigate('/admin/setup')}
-              className="text-xs text-slate-400 hover:text-amber-400 flex items-center justify-center gap-1.5 mx-auto"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              First-Time Administrator Setup Wizard
-            </button>
-          </div>
+          {/* First time setup option only if database is uninitialized */}
+          {needsBootstrap && (
+            <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+              <button
+                onClick={() => onNavigate('/admin/setup')}
+                className="text-xs text-slate-400 hover:text-amber-400 flex items-center justify-center gap-1.5 mx-auto"
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                First-Time Administrator Setup Wizard
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Security Notice */}

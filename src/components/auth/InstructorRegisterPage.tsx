@@ -54,7 +54,7 @@ export const InstructorRegisterPage: React.FC<InstructorRegisterPageProps> = ({ 
         department,
         specialization,
       });
-      onNavigate('/admin-portal');
+      onNavigate('/instructor/portal');
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed.');
     } finally {
