@@ -1,0 +1,6 @@
+{
+  "name": "LTI Tech EduTech LMS",
+  "description": "Production-ready EduTech Learning Management System with student dashboard, course progress, interactive lesson player, assessments, and dark mode support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
