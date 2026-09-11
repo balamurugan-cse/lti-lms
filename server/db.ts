@@ -276,6 +276,40 @@ export interface RefreshSessionRecord {
   createdAt: string;
 }
 
+export interface EmailVerificationTokenRecord {
+  id: string;
+  userId: string;
+  email: string;
+  code: string; // 6-digit numeric verification code
+  token: string; // Cryptographic url-safe verification token
+  expiresAt: string;
+  verified: boolean;
+  createdAt: string;
+}
+
+export interface PasswordResetTokenRecord {
+  id: string;
+  userId: string;
+  email: string;
+  code: string; // 6-digit numeric reset code
+  token: string; // Cryptographic url-safe reset token
+  expiresAt: string;
+  used: boolean;
+  createdAt: string;
+}
+
+export interface EmailLogRecord {
+  id: string;
+  to: string;
+  subject: string;
+  type: 'VERIFICATION' | 'PASSWORD_RESET' | 'WELCOME' | 'ENROLLMENT' | 'GRADE' | 'NOTIFICATION';
+  code?: string;
+  previewText?: string;
+  sentAt: string;
+  status: 'DELIVERED' | 'SIMULATED' | 'FAILED';
+  error?: string;
+}
+
 export interface SystemSettingsRecord {
   institutionName: string;
   allowSelfRegistration: boolean;
@@ -307,11 +341,16 @@ export interface DatabaseState {
   discussions: DiscussionRecord[];
   auditLogs: AuditLogRecord[];
   refreshSessions: RefreshSessionRecord[];
+  emailVerificationTokens: EmailVerificationTokenRecord[];
+  passwordResetTokens: PasswordResetTokenRecord[];
+  emailLogs: EmailLogRecord[];
   systemSettings: SystemSettingsRecord;
 }
 
-const DB_DIR = path.join(process.cwd(), 'data');
+// On Vercel serverless runtime, only /tmp is writable
+const DB_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'lms.production.json');
+const SEED_FILE = path.join(process.cwd(), 'data', 'lms.production.json');
 
 function getInitialEmptyDatabase(): DatabaseState {
   return {
@@ -336,6 +375,9 @@ function getInitialEmptyDatabase(): DatabaseState {
     discussions: [],
     auditLogs: [],
     refreshSessions: [],
+    emailVerificationTokens: [],
+    passwordResetTokens: [],
+    emailLogs: [],
     systemSettings: {
       institutionName: 'LTI Tech / EduTech LMS',
       allowSelfRegistration: true,
@@ -359,8 +401,10 @@ class ProductionDatabase {
       if (!fs.existsSync(DB_DIR)) {
         fs.mkdirSync(DB_DIR, { recursive: true });
       }
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      // Check writable DB_FILE first, or fallback to bundled SEED_FILE
+      const targetFile = fs.existsSync(DB_FILE) ? DB_FILE : (fs.existsSync(SEED_FILE) ? SEED_FILE : null);
+      if (targetFile) {
+        const raw = fs.readFileSync(targetFile, 'utf-8');
         const parsed = JSON.parse(raw);
         // Ensure all arrays exist
         return {

@@ -25,17 +25,34 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mismatchPortal, setMismatchPortal] = useState<string | null>(null);
+  const [needsVerificationEmail, setNeedsVerificationEmail] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setMismatchPortal(null);
+    setNeedsVerificationEmail(null);
     setLoading(true);
 
     try {
-      await loginStudent(email, password);
+      const result: any = await loginStudent(email, password);
+      if (result && result.verificationRequired) {
+        localStorage.setItem('lti_pending_verify_email', email);
+        if (result.previewCode) {
+          localStorage.setItem('lti_last_preview_code', result.previewCode);
+        }
+        onNavigate(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
       onNavigate('/dashboard');
     } catch (err: any) {
+      if (err.data?.verificationRequired || err.message?.toLowerCase().includes('verification')) {
+        setNeedsVerificationEmail(email);
+        localStorage.setItem('lti_pending_verify_email', email);
+        if (err.data?.previewCode) {
+          localStorage.setItem('lti_last_preview_code', err.data.previewCode);
+        }
+      }
       setErrorMessage(err.message || 'Authentication failed.');
       if (err.data?.correctPortal) {
         setMismatchPortal(err.data.correctPortal);
@@ -85,8 +102,17 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
           {errorMessage && (
             <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-3">
               <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="space-y-2">
                 <p className="font-semibold text-rose-200">{errorMessage}</p>
+                {needsVerificationEmail && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(`/verify-email?email=${encodeURIComponent(needsVerificationEmail)}`)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Mail className="w-3.5 h-3.5" /> Enter 6-Digit Email Verification Code →
+                  </button>
+                )}
                 {mismatchPortal && (
                   <button
                     type="button"
@@ -127,7 +153,7 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
                 </label>
                 <button
                   type="button"
-                  onClick={() => alert('Password reset link will be sent to your registered institutional email.')}
+                  onClick={() => onNavigate('/forgot-password')}
                   className="text-[11px] text-amber-400 hover:underline"
                 >
                   Forgot password?
@@ -172,8 +198,8 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
             </button>
           </form>
 
-          {/* Registration Link */}
-          <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+          {/* Registration & Verification Links */}
+          <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-2">
             <p className="text-xs text-slate-400">
               New to LTI Tech LMS?{' '}
               <button
@@ -182,6 +208,16 @@ export const StudentLoginPage: React.FC<StudentLoginPageProps> = ({ onNavigate }
                 className="text-amber-400 hover:underline font-bold"
               >
                 Create Student Account
+              </button>
+            </p>
+            <p className="text-xs text-slate-500">
+              Received a code?{' '}
+              <button
+                type="button"
+                onClick={() => onNavigate('/verify-email')}
+                className="text-sky-400 hover:underline font-medium"
+              >
+                Verify email address →
               </button>
             </p>
           </div>

@@ -1,0 +1,141 @@
+{
+  "users": [
+    {
+      "id": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "email": "alex@example.com",
+      "passwordHash": "$2b$10$E1fcA3SyDuVAp2BEYiBRaehqbxb4n13JVelD.vIbErjxZdzzmmCaW",
+      "name": "Alex Johnson",
+      "role": "STUDENT",
+      "status": "ACTIVE",
+      "failedLoginCount": 0,
+      "lockedUntil": null,
+      "lastLoginAt": "2026-09-11T13:19:25.926Z",
+      "createdAt": "2026-09-11T13:18:48.045Z",
+      "updatedAt": "2026-09-11T13:19:17.952Z"
+    }
+  ],
+  "studentProfiles": [
+    {
+      "id": "prof-a6a1a9fa-56b1-45d2-b9c0-1de1c5a896fb",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "studentId": "STU-2026-001",
+      "gradeLevel": "Undergraduate",
+      "createdAt": "2026-09-11T13:18:48.045Z"
+    }
+  ],
+  "instructorProfiles": [],
+  "courses": [],
+  "courseCategories": [],
+  "courseModules": [],
+  "lessons": [],
+  "lessonResources": [],
+  "quizzes": [],
+  "questions": [],
+  "quizAttempts": [],
+  "assignments": [],
+  "assignmentSubmissions": [],
+  "enrollments": [],
+  "lessonProgress": [],
+  "certificates": [],
+  "announcements": [],
+  "notifications": [],
+  "discussions": [],
+  "auditLogs": [
+    {
+      "id": "audit-1789132765928-ei4gy5a",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "actor": "alex@example.com",
+      "action": "LOGIN_SUCCESS",
+      "details": "User alex@example.com logged into Student Portal",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:19:25.928Z"
+    },
+    {
+      "id": "audit-1789132757952-frus9sx",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "actor": "alex@example.com",
+      "action": "EMAIL_VERIFIED",
+      "details": "Email successfully verified for alex@example.com. Account activated.",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:19:17.952Z"
+    },
+    {
+      "id": "audit-1789132728046-t89g5wh",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "actor": "alex@example.com",
+      "action": "STUDENT_REGISTERED_PENDING",
+      "details": "New student account registered (pending verification): alex@example.com",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:18:48.046Z"
+    }
+  ],
+  "refreshSessions": [
+    {
+      "id": "5e6972ae-e7cb-415c-bd66-ec1602fd9d2f",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "refreshTokenHash": "331ccaa847752d88b49f6e30734cc0a4873fd32453c5196b6a231bb8afa0b939",
+      "familyId": "9932dfa2-d0a5-4c36-ba0d-250a68196c4a",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:19:25.926Z",
+      "expiresAt": "2026-09-18T13:19:25.928Z",
+      "createdAt": "2026-09-11T13:19:25.926Z"
+    }
+  ],
+  "emailVerificationTokens": [
+    {
+      "id": "evt-08e7e359-4073-449b-9b6f-8e269d968b2c",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "email": "alex@example.com",
+      "code": "349742",
+      "token": "79c7ae0739e062ff86ccaac5463df789132e0020272db6293acca10a4f259cee",
+      "expiresAt": "2026-09-11T13:33:55.310Z",
+      "verified": true,
+      "createdAt": "2026-09-11T13:18:55.310Z"
+    }
+  ],
+  "passwordResetTokens": [],
+  "emailLogs": [
+    {
+      "id": "email-1789132757952-oiae9",
+      "to": "alex@example.com",
+      "subject": "Welcome to LTI Tech LMS, Alex Johnson!",
+      "type": "WELCOME",
+      "previewText": "Hello Alex Johnson,\n\nYour STUDENT account is now active on LTI Tech EduTech LMS!\n\nAccess your dashboard: https://ais-dev-tgg3j4uxvocadfnwf5yuyy-814715418589.asi",
+      "sentAt": "2026-09-11T13:19:17.952Z",
+      "status": "SIMULATED"
+    },
+    {
+      "id": "email-1789132735310-65bec",
+      "to": "alex@example.com",
+      "subject": "[LTI LMS] 349742 is your student verification code",
+      "type": "VERIFICATION",
+      "code": "349742",
+      "previewText": "Hello Alex Johnson,\n\nYour LTI Tech EduTech LMS verification code is: 349742\n\nThis code will expire in 15 minutes.\n\nAlternatively, verify your account here:\nhttp",
+      "sentAt": "2026-09-11T13:18:55.310Z",
+      "status": "SIMULATED"
+    },
+    {
+      "id": "email-1789132728047-d7boo",
+      "to": "alex@example.com",
+      "subject": "[LTI LMS] 995018 is your student verification code",
+      "type": "VERIFICATION",
+      "code": "995018",
+      "previewText": "Hello Alex Johnson,\n\nYour LTI Tech EduTech LMS verification code is: 995018\n\nThis code will expire in 15 minutes.\n\nAlternatively, verify your account here:\nhttp",
+      "sentAt": "2026-09-11T13:18:48.047Z",
+      "status": "SIMULATED"
+    }
+  ],
+  "systemSettings": {
+    "institutionName": "LTI Tech / EduTech LMS",
+    "allowSelfRegistration": true,
+    "sessionTimeoutMinutes": 30,
+    "mfaEnforcedForAdmins": false,
+    "maintenanceMode": false,
+    "updatedAt": "2026-09-11T12:45:36.489Z"
+  }
+}

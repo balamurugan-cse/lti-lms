@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { db, UserRecord, AdminPermission, ADMIN_PERMISSIONS } from './db';
+import { emailService } from './emailService';
 import {
   hashPassword,
   comparePassword,
@@ -150,6 +151,38 @@ apiRouter.post('/auth/student/register', async (req: Request, res: Response) => 
   const cleanEmail = email.trim().toLowerCase();
   const existing = db.read().users.find((u) => u.email === cleanEmail);
   if (existing) {
+    if (existing.status === 'PENDING_VERIFICATION') {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const now = new Date().toISOString();
+
+      db.update((draft) => {
+        draft.emailVerificationTokens = draft.emailVerificationTokens.filter((t) => t.email !== cleanEmail);
+        draft.emailVerificationTokens.push({
+          id: `evt-${crypto.randomUUID()}`,
+          userId: existing.id,
+          email: cleanEmail,
+          code,
+          token,
+          expiresAt,
+          verified: false,
+          createdAt: now,
+        });
+      });
+
+      emailService.sendVerificationEmail(cleanEmail, existing.name, code, token).catch(() => {});
+
+      res.status(200).json({
+        success: true,
+        verificationRequired: true,
+        email: cleanEmail,
+        name: existing.name,
+        message: 'Account is pending verification. A fresh 6-digit verification code has been dispatched to your email.',
+        previewCode: code,
+      });
+      return;
+    }
     res.status(409).json({ error: 'An account with this email address already exists.' });
     return;
   }
@@ -169,13 +202,17 @@ apiRouter.post('/auth/student/register', async (req: Request, res: Response) => 
     passwordHash,
     name: name.trim(),
     role: 'STUDENT',
-    status: 'ACTIVE',
+    status: 'PENDING_VERIFICATION',
     failedLoginCount: 0,
     lockedUntil: null,
-    lastLoginAt: now,
+    lastLoginAt: null,
     createdAt: now,
     updatedAt: now,
   };
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   db.update((draft) => {
     draft.users.push(newUser);
@@ -186,26 +223,38 @@ apiRouter.post('/auth/student/register', async (req: Request, res: Response) => 
       gradeLevel: gradeLevel || 'Undergraduate',
       createdAt: now,
     });
+    draft.emailVerificationTokens.push({
+      id: `evt-${crypto.randomUUID()}`,
+      userId,
+      email: cleanEmail,
+      code,
+      token,
+      expiresAt,
+      verified: false,
+      createdAt: now,
+    });
   });
 
   db.addAuditLog(
-    'STUDENT_REGISTERED',
-    `New student account registered: ${cleanEmail}`,
+    'STUDENT_REGISTERED_PENDING',
+    `New student account registered (pending verification): ${cleanEmail}`,
     ip,
     'SUCCESS',
     userId,
     cleanEmail
   );
 
-  const familyId = crypto.randomUUID();
-  const accessToken = generateAccessToken(newUser);
-  const refreshToken = generateRefreshToken(newUser, familyId);
+  emailService.sendVerificationEmail(cleanEmail, name.trim(), code, token).catch((err) => {
+    console.error('[Student Register] Failed to send verification email:', err);
+  });
 
   res.status(201).json({
-    message: 'Student account successfully created.',
-    user: sanitizeUser(newUser),
-    accessToken,
-    refreshToken,
+    success: true,
+    verificationRequired: true,
+    email: cleanEmail,
+    name: name.trim(),
+    message: 'Student account created. A 6-digit verification code has been dispatched to your email.',
+    previewCode: code,
   });
 });
 
@@ -322,12 +371,6 @@ async function handleRoleLogin(
     return;
   }
 
-  if (user.status !== 'ACTIVE') {
-    db.addAuditLog('LOGIN_BLOCKED_STATUS', `Login denied: Account ${cleanEmail} is ${user.status}`, ip, 'WARNING', user.id);
-    res.status(403).json({ error: `Account access denied: status is ${user.status}. Contact administrator.` });
-    return;
-  }
-
   const validPassword = await comparePassword(password, user.passwordHash);
   if (!validPassword) {
     db.update((draft) => {
@@ -336,6 +379,44 @@ async function handleRoleLogin(
     });
     db.addAuditLog('LOGIN_FAILED_CREDENTIALS', `Invalid password entered for ${cleanEmail}`, ip, 'FAILURE', user.id);
     res.status(401).json({ error: 'Invalid credentials.' });
+    return;
+  }
+
+  if (user.status === 'PENDING_VERIFICATION') {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    db.update((draft) => {
+      draft.emailVerificationTokens = draft.emailVerificationTokens.filter((t) => t.email !== cleanEmail);
+      draft.emailVerificationTokens.push({
+        id: `evt-${crypto.randomUUID()}`,
+        userId: user.id,
+        email: cleanEmail,
+        code,
+        token,
+        expiresAt,
+        verified: false,
+        createdAt: now,
+      });
+    });
+
+    emailService.sendVerificationEmail(cleanEmail, user.name, code, token).catch(() => {});
+
+    res.status(200).json({
+      verificationRequired: true,
+      email: cleanEmail,
+      name: user.name,
+      message: 'Account email verification required. A 6-digit verification code has been dispatched to your email.',
+      previewCode: code,
+    });
+    return;
+  }
+
+  if (user.status !== 'ACTIVE') {
+    db.addAuditLog('LOGIN_BLOCKED_STATUS', `Login denied: Account ${cleanEmail} is ${user.status}`, ip, 'WARNING', user.id);
+    res.status(403).json({ error: `Account access denied: status is ${user.status}. Contact administrator.` });
     return;
   }
 
@@ -572,13 +653,284 @@ apiRouter.get('/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Re
   res.json({ user: sanitizeUser(user) });
 });
 
-// Forgot Password
-apiRouter.post('/auth/forgot-password', (req: Request, res: Response) => {
-  const { email } = req.body;
-  // Always return success message to prevent user enumeration
-  res.json({
-    message: 'If an account with that email exists, password reset instructions have been dispatched.',
+// Verify Email Address with 6-Digit Code or Link
+apiRouter.post('/auth/verify-email', async (req: Request, res: Response) => {
+  const ip = getClientIp(req);
+  const { email, code, token } = req.body;
+
+  if (!email || (!code && !token)) {
+    res.status(400).json({ error: 'Email and 6-digit verification code are required.' });
+    return;
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code ? String(code).trim() : null;
+  const cleanToken = token ? String(token).trim() : null;
+
+  const now = new Date();
+  const verificationRecord = db.read().emailVerificationTokens.find(
+    (t) =>
+      t.email === cleanEmail &&
+      !t.verified &&
+      new Date(t.expiresAt) > now &&
+      ((cleanCode && t.code === cleanCode) || (cleanToken && t.token === cleanToken))
+  );
+
+  if (!verificationRecord) {
+    db.addAuditLog(
+      'EMAIL_VERIFICATION_FAILED',
+      `Invalid or expired verification code entered for ${cleanEmail}`,
+      ip,
+      'FAILURE'
+    );
+    res.status(400).json({
+      error: 'Invalid or expired verification code. Please check your email or request a new code.',
+    });
+    return;
+  }
+
+  const user = db.read().users.find((u) => u.id === verificationRecord.userId || u.email === cleanEmail);
+  if (!user) {
+    res.status(404).json({ error: 'User account not found.' });
+    return;
+  }
+
+  db.update((draft) => {
+    const rec = draft.emailVerificationTokens.find((t) => t.id === verificationRecord.id);
+    if (rec) rec.verified = true;
+
+    const u = draft.users.find((usr) => usr.id === user.id);
+    if (u) {
+      u.status = 'ACTIVE';
+      u.updatedAt = new Date().toISOString();
+    }
   });
+
+  db.addAuditLog(
+    'EMAIL_VERIFIED',
+    `Email successfully verified for ${cleanEmail}. Account activated.`,
+    ip,
+    'SUCCESS',
+    user.id,
+    cleanEmail
+  );
+
+  emailService.sendWelcomeEmail(cleanEmail, user.name, user.role).catch(() => {});
+
+  const familyId = crypto.randomUUID();
+  const accessToken = generateAccessToken({ ...user, status: 'ACTIVE' });
+  const refreshToken = generateRefreshToken({ ...user, status: 'ACTIVE' }, familyId);
+
+  res.json({
+    success: true,
+    message: 'Email address successfully verified! Your account is now active.',
+    user: sanitizeUser({ ...user, status: 'ACTIVE' }),
+    accessToken,
+    refreshToken,
+  });
+});
+
+// Resend Email Verification Code
+apiRouter.post('/auth/resend-verification-code', async (req: Request, res: Response) => {
+  const ip = getClientIp(req);
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400).json({ error: 'Email address is required.' });
+    return;
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = db.read().users.find((u) => u.email === cleanEmail);
+
+  if (!user) {
+    res.json({ message: 'If an account is pending verification, a new code was dispatched.' });
+    return;
+  }
+
+  if (user.status === 'ACTIVE') {
+    res.status(400).json({ error: 'This account is already verified and active. You can log in directly.' });
+    return;
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+
+  db.update((draft) => {
+    draft.emailVerificationTokens = draft.emailVerificationTokens.filter((t) => t.email !== cleanEmail);
+    draft.emailVerificationTokens.push({
+      id: `evt-${crypto.randomUUID()}`,
+      userId: user.id,
+      email: cleanEmail,
+      code,
+      token,
+      expiresAt,
+      verified: false,
+      createdAt: now,
+    });
+  });
+
+  db.addAuditLog(
+    'VERIFICATION_CODE_RESENT',
+    `New verification code dispatched to ${cleanEmail}`,
+    ip,
+    'SUCCESS',
+    user.id,
+    cleanEmail
+  );
+
+  emailService.sendVerificationEmail(cleanEmail, user.name, code, token).catch(() => {});
+
+  res.json({
+    success: true,
+    message: 'A fresh 6-digit verification code has been dispatched to your email.',
+    previewCode: code,
+  });
+});
+
+// Forgot Password - Generates 6-digit reset code and emails it
+apiRouter.post('/auth/forgot-password', async (req: Request, res: Response) => {
+  const ip = getClientIp(req);
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400).json({ error: 'Email address is required.' });
+    return;
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = db.read().users.find((u) => u.email === cleanEmail);
+
+  let previewCode: string | undefined = undefined;
+
+  if (user) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    db.update((draft) => {
+      draft.passwordResetTokens = draft.passwordResetTokens.filter((t) => t.email !== cleanEmail);
+      draft.passwordResetTokens.push({
+        id: `prt-${crypto.randomUUID()}`,
+        userId: user.id,
+        email: cleanEmail,
+        code,
+        token,
+        expiresAt,
+        used: false,
+        createdAt: now,
+      });
+    });
+
+    db.addAuditLog(
+      'PASSWORD_RESET_REQUESTED',
+      `Password reset code generated and dispatched for ${cleanEmail}`,
+      ip,
+      'SUCCESS',
+      user.id,
+      cleanEmail
+    );
+
+    emailService.sendPasswordResetEmail(cleanEmail, user.name, code, token).catch(() => {});
+    previewCode = code;
+  }
+
+  res.json({
+    success: true,
+    message: 'If an account with that email exists, a 6-digit password reset code has been sent.',
+    previewCode,
+  });
+});
+
+// Reset Password - Verifies code and sets new password
+apiRouter.post('/auth/reset-password', async (req: Request, res: Response) => {
+  const ip = getClientIp(req);
+  const { email, code, token, newPassword } = req.body;
+
+  if (!email || (!code && !token) || !newPassword) {
+    res.status(400).json({ error: 'Email, reset code, and new password are required.' });
+    return;
+  }
+
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+    return;
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code ? String(code).trim() : null;
+  const cleanToken = token ? String(token).trim() : null;
+
+  const now = new Date();
+  const resetRecord = db.read().passwordResetTokens.find(
+    (t) =>
+      t.email === cleanEmail &&
+      !t.used &&
+      new Date(t.expiresAt) > now &&
+      ((cleanCode && t.code === cleanCode) || (cleanToken && t.token === cleanToken))
+  );
+
+  if (!resetRecord) {
+    db.addAuditLog(
+      'PASSWORD_RESET_INVALID_TOKEN',
+      `Invalid or expired password reset attempt for ${cleanEmail}`,
+      ip,
+      'FAILURE'
+    );
+    res.status(400).json({
+      error: 'Invalid or expired password reset code. Please request a new code.',
+    });
+    return;
+  }
+
+  const user = db.read().users.find((u) => u.id === resetRecord.userId || u.email === cleanEmail);
+  if (!user) {
+    res.status(404).json({ error: 'User account not found.' });
+    return;
+  }
+
+  const newHash = await hashPassword(newPassword);
+
+  db.update((draft) => {
+    const rec = draft.passwordResetTokens.find((t) => t.id === resetRecord.id);
+    if (rec) rec.used = true;
+
+    const u = draft.users.find((usr) => usr.id === user.id);
+    if (u) {
+      u.passwordHash = newHash;
+      u.failedLoginCount = 0;
+      u.lockedUntil = null;
+      if (u.status === 'PENDING_VERIFICATION') {
+        u.status = 'ACTIVE';
+      }
+      u.updatedAt = new Date().toISOString();
+    }
+
+    draft.refreshSessions = draft.refreshSessions.filter((s) => s.userId !== user.id);
+  });
+
+  db.addAuditLog(
+    'PASSWORD_RESET_SUCCESS',
+    `Password successfully reset for ${cleanEmail}`,
+    ip,
+    'SUCCESS',
+    user.id,
+    cleanEmail
+  );
+
+  res.json({
+    success: true,
+    message: 'Your password has been successfully reset. You can now log in with your new password.',
+  });
+});
+
+// Recent Email Logs Inspection Endpoint
+apiRouter.get('/emails/recent', (req: Request, res: Response) => {
+  const logs = db.read().emailLogs.slice(0, 25);
+  res.json({ emails: logs });
 });
 
 /* =========================================================================
@@ -794,6 +1146,12 @@ apiRouter.post('/enrollments', authenticateToken, (req: AuthenticatedRequest, re
   db.update((draft) => {
     draft.enrollments.push(enrollment);
   });
+
+  // Dispatch enrollment confirmation email
+  const studentUser = db.read().users.find((u) => u.id === userId);
+  if (studentUser) {
+    emailService.sendEnrollmentEmail(studentUser.email, studentUser.name, course.title, course.code).catch(() => {});
+  }
 
   db.addAuditLog(
     'COURSE_ENROLLMENT',
@@ -1174,6 +1532,15 @@ apiRouter.patch(
       req.user!.userId,
       req.user!.email
     );
+
+    // Dispatch grade notification email to student
+    const studentUser = db.read().users.find((u) => u.id === submission.userId);
+    const assignment = db.read().assignments.find((a) => a.id === submission.assignmentId);
+    if (studentUser && assignment) {
+      emailService
+        .sendGradeNotificationEmail(studentUser.email, studentUser.name, assignment.title, Number(grade), feedback)
+        .catch(() => {});
+    }
 
     res.json({ message: 'Grade recorded successfully.' });
   }

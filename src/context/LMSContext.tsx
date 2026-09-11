@@ -32,15 +32,20 @@ export type AppView =
   | 'instructor-login'
   | 'instructor-register'
   | 'admin-login'
-  | 'admin-setup';
+  | 'admin-setup'
+  | 'verify-email'
+  | 'forgot-password'
+  | 'reset-password'
+  | 'email-outbox'
+  | 'not-found';
 
 interface LMSContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
   isAuthenticated: boolean;
   isLoadingAuth: boolean;
-  loginStudent: (email: string, pass: string) => Promise<void>;
-  registerStudent: (data: { name: string; email: string; password: string; studentId?: string; gradeLevel?: string }) => Promise<void>;
+  loginStudent: (email: string, pass: string) => Promise<any>;
+  registerStudent: (data: { name: string; email: string; password: string; studentId?: string; gradeLevel?: string }) => Promise<any>;
   loginInstructor: (email: string, pass: string) => Promise<void>;
   registerInstructor: (data: { name: string; email: string; password: string; specialization?: string; department?: string }) => Promise<void>;
   loginAdmin: (email: string, pass: string, mfaCode?: string) => Promise<any>;
@@ -127,22 +132,28 @@ interface LMSContextType {
 
 const LMSContext = createContext<LMSContextType | undefined>(undefined);
 
-function pathToView(path: string): AppView {
+function pathToView(rawPath: string): AppView {
+  const path = (rawPath || '/').split('?')[0].replace(/\/+$/, '') || '/';
   if (path === '/student/login') return 'student-login';
   if (path === '/student/register') return 'student-register';
   if (path === '/instructor/login') return 'instructor-login';
   if (path === '/instructor/register') return 'instructor-register';
   if (path === '/admin/login') return 'admin-login';
   if (path === '/admin/setup') return 'admin-setup';
+  if (path === '/verify-email') return 'verify-email';
+  if (path === '/forgot-password') return 'forgot-password';
+  if (path === '/reset-password') return 'reset-password';
+  if (path === '/emails' || path === '/outbox') return 'email-outbox';
   if (path === '/courses') return 'courses';
   if (path === '/learn') return 'learn';
   if (path === '/quizzes') return 'quizzes';
   if (path === '/assignments') return 'assignments';
+  if (path === '/certificates') return 'certificates';
   if (path === '/admin-portal' || path === '/admin/portal') return 'admin-portal';
   if (path === '/instructor-portal' || path === '/instructor/portal') return 'instructor-portal';
   if (path === '/architecture') return 'architecture';
-  if (path === '/dashboard') return 'dashboard';
-  return 'dashboard';
+  if (path === '/dashboard' || path === '/') return 'dashboard';
+  return 'not-found';
 }
 
 function viewToPath(view: AppView): string {
@@ -153,14 +164,20 @@ function viewToPath(view: AppView): string {
     case 'instructor-register': return '/instructor/register';
     case 'admin-login': return '/admin/login';
     case 'admin-setup': return '/admin/setup';
+    case 'verify-email': return '/verify-email';
+    case 'forgot-password': return '/forgot-password';
+    case 'reset-password': return '/reset-password';
+    case 'email-outbox': return '/emails';
     case 'courses': return '/courses';
     case 'course-detail': return '/courses';
     case 'learn': return '/learn';
     case 'quizzes': return '/quizzes';
     case 'assignments': return '/assignments';
+    case 'certificates': return '/certificates';
     case 'admin-portal': return '/admin/portal';
     case 'instructor-portal': return '/instructor/portal';
     case 'architecture': return '/architecture';
+    case 'not-found': return '/not-found';
     case 'dashboard':
     default: return '/dashboard';
   }
@@ -445,14 +462,20 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loginStudent = async (email: string, pass: string) => {
     const res = await api.loginStudent(email, pass);
-    setCurrentUser(res.user);
-    await refreshCourses();
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const registerStudent = async (data: { name: string; email: string; password: string; studentId?: string; gradeLevel?: string }) => {
     const res = await api.registerStudent(data);
-    setCurrentUser(res.user);
-    await refreshCourses();
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const loginInstructor = async (email: string, pass: string) => {

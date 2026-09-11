@@ -119,21 +119,82 @@ class LMSApiClient {
   }
 
   public async loginStudent(email: string, password: string) {
-    const res = await this.request<{ user: any; accessToken: string; refreshToken: string }>(
-      '/auth/student/login',
-      { method: 'POST', body: JSON.stringify({ email, password }) }
-    );
-    this.setTokens(res.accessToken, res.refreshToken);
+    const res = await this.request<{
+      user?: any;
+      accessToken?: string;
+      refreshToken?: string;
+      verificationRequired?: boolean;
+      email?: string;
+      name?: string;
+      previewCode?: string;
+      message?: string;
+    }>('/auth/student/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
     return res;
   }
 
   public async registerStudent(data: { name: string; email: string; password: string; studentId?: string; gradeLevel?: string }) {
-    const res = await this.request<{ user: any; accessToken: string; refreshToken: string }>(
-      '/auth/student/register',
-      { method: 'POST', body: JSON.stringify(data) }
-    );
-    this.setTokens(res.accessToken, res.refreshToken);
+    const res = await this.request<{
+      success?: boolean;
+      verificationRequired?: boolean;
+      email?: string;
+      name?: string;
+      previewCode?: string;
+      message?: string;
+      user?: any;
+      accessToken?: string;
+      refreshToken?: string;
+    }>('/auth/student/register', { method: 'POST', body: JSON.stringify(data) });
+
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
     return res;
+  }
+
+  public async verifyEmail(data: { email: string; code?: string; token?: string }) {
+    const res = await this.request<{
+      success: boolean;
+      message: string;
+      user: any;
+      accessToken: string;
+      refreshToken: string;
+    }>('/auth/verify-email', { method: 'POST', body: JSON.stringify(data) });
+
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
+    return res;
+  }
+
+  public async resendVerificationCode(email: string) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      previewCode?: string;
+    }>('/auth/resend-verification-code', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
+  public async forgotPassword(email: string) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      previewCode?: string;
+    }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
+  public async resetPassword(data: { email: string; code?: string; token?: string; newPassword: string }) {
+    return this.request<{
+      success: boolean;
+      message: string;
+    }>('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  public async getRecentEmails() {
+    return this.request<{ emails: any[] }>('/emails/recent');
   }
 
   public async loginInstructor(email: string, password: string) {

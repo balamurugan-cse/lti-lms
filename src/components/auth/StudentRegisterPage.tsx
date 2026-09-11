@@ -47,14 +47,19 @@ export const StudentRegisterPage: React.FC<StudentRegisterPageProps> = ({ onNavi
     setLoading(true);
 
     try {
-      await registerStudent({
+      const res: any = await registerStudent({
         name,
-        email,
+        email: email.trim(),
         password,
         studentId: studentId.trim() || undefined,
         gradeLevel,
       });
-      onNavigate('/dashboard');
+
+      localStorage.setItem('lti_pending_verify_email', email.trim());
+      if (res?.previewCode) {
+        localStorage.setItem('lti_last_preview_code', res.previewCode);
+      }
+      onNavigate(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed.');
     } finally {

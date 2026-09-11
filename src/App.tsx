@@ -24,6 +24,11 @@ import { InstructorLoginPage } from './components/auth/InstructorLoginPage';
 import { InstructorRegisterPage } from './components/auth/InstructorRegisterPage';
 import { AdminLoginPage } from './components/auth/AdminLoginPage';
 import { AdminSetupPage } from './components/auth/AdminSetupPage';
+import { VerifyEmailPage } from './components/auth/VerifyEmailPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
+import { EmailOutboxModal } from './components/auth/EmailOutboxModal';
+import { NotFoundView } from './components/common/NotFoundView';
+import { Mail } from 'lucide-react';
 
 const LMSMainContent: React.FC = () => {
   const { currentView, setCurrentView, navigate, highContrast, currentUser, isLoadingAuth } = useLMS();
@@ -32,6 +37,7 @@ const LMSMainContent: React.FC = () => {
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
   const [certificateCourseId, setCertificateCourseId] = useState<string | null>(null);
   const [showAccessibilityModal, setShowAccessibilityModal] = useState<boolean>(false);
+  const [showEmailOutboxModal, setShowEmailOutboxModal] = useState<boolean>(false);
 
   // Global keyboard shortcuts for WCAG AA compliance
   useEffect(() => {
@@ -62,7 +68,10 @@ const LMSMainContent: React.FC = () => {
     currentView === 'instructor-login' ||
     currentView === 'instructor-register' ||
     currentView === 'admin-login' ||
-    currentView === 'admin-setup';
+    currentView === 'admin-setup' ||
+    currentView === 'verify-email' ||
+    currentView === 'forgot-password' ||
+    currentView === 'reset-password';
 
   return (
     <div
@@ -91,6 +100,10 @@ const LMSMainContent: React.FC = () => {
             {currentView === 'instructor-register' && <InstructorRegisterPage onNavigate={navigate} />}
             {currentView === 'admin-login' && <AdminLoginPage onNavigate={navigate} />}
             {currentView === 'admin-setup' && <AdminSetupPage onNavigate={navigate} />}
+            {currentView === 'verify-email' && <VerifyEmailPage onNavigate={navigate} />}
+            {currentView === 'forgot-password' && <ForgotPasswordPage initialStep="REQUEST" onNavigate={navigate} />}
+            {currentView === 'reset-password' && <ForgotPasswordPage initialStep="RESET" onNavigate={navigate} />}
+            {currentView === 'not-found' && <NotFoundView onNavigate={navigate} />}
 
             {/* Core Application Views */}
             {currentView === 'dashboard' && (
@@ -195,6 +208,14 @@ const LMSMainContent: React.FC = () => {
             >
               Accessibility & Theme
             </button>
+            <span>•</span>
+            <button
+              onClick={() => setShowEmailOutboxModal(true)}
+              className="hover:text-amber-400 transition-colors text-slate-400 hover:text-white flex items-center gap-1"
+            >
+              <Mail className="w-3 h-3 text-amber-400" />
+              Email Outbox & Codes
+            </button>
             {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') && (
               <>
                 <span>•</span>
@@ -209,6 +230,21 @@ const LMSMainContent: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Email Outbox Live Feed & Code Inspector Modal */}
+      <EmailOutboxModal
+        isOpen={showEmailOutboxModal || currentView === 'email-outbox'}
+        onClose={() => {
+          setShowEmailOutboxModal(false);
+          if (currentView === 'email-outbox') {
+            navigate('/dashboard');
+          }
+        }}
+        onSelectCode={(code, email) => {
+          setShowEmailOutboxModal(false);
+          navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`);
+        }}
+      />
 
       {/* Active Quiz Assessment Modal */}
       {activeQuizId && (
