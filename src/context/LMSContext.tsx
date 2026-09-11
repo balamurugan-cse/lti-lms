@@ -50,6 +50,9 @@ interface LMSContextType {
   registerInstructor: (data: { name: string; email: string; password: string; specialization?: string; department?: string }) => Promise<void>;
   loginAdmin: (email: string, pass: string, mfaCode?: string) => Promise<any>;
   bootstrapAdmin: (data: { name: string; email: string; password: string }) => Promise<void>;
+  quickDemoLogin: (role?: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN', email?: string) => Promise<any>;
+  loginWithEmailCode: (email: string, code: string) => Promise<any>;
+  googleSignIn: (data?: { email?: string; name?: string; role?: string }) => Promise<any>;
   logout: () => Promise<void>;
   logoutAllSessions: () => Promise<void>;
   
@@ -134,7 +137,7 @@ const LMSContext = createContext<LMSContextType | undefined>(undefined);
 
 function pathToView(rawPath: string): AppView {
   const path = (rawPath || '/').split('?')[0].replace(/\/+$/, '') || '/';
-  if (path === '/student/login') return 'student-login';
+  if (path === '/student/login' || path === '/login' || path === '/signin') return 'student-login';
   if (path === '/student/register') return 'student-register';
   if (path === '/instructor/login') return 'instructor-login';
   if (path === '/instructor/register') return 'instructor-register';
@@ -480,14 +483,20 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loginInstructor = async (email: string, pass: string) => {
     const res = await api.loginInstructor(email, pass);
-    setCurrentUser(res.user);
-    await refreshCourses();
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const registerInstructor = async (data: { name: string; email: string; password: string; specialization?: string; department?: string }) => {
     const res = await api.registerInstructor(data);
-    setCurrentUser(res.user);
-    await refreshCourses();
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const loginAdmin = async (email: string, pass: string, mfaCode?: string) => {
@@ -503,6 +512,33 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await api.bootstrapAdmin(data);
     setCurrentUser(res.user);
     await refreshCourses();
+  };
+
+  const quickDemoLogin = async (role?: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN', email?: string) => {
+    const res = await api.quickDemoLogin(role, email);
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
+  };
+
+  const loginWithEmailCode = async (email: string, code: string) => {
+    const res = await api.loginWithEmailCode(email, code);
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
+  };
+
+  const googleSignIn = async (data?: { email?: string; name?: string; role?: string }) => {
+    const res = await api.googleSignIn(data);
+    if (res.user) {
+      setCurrentUser(res.user);
+      await refreshCourses();
+    }
+    return res;
   };
 
   const logout = async () => {
@@ -773,6 +809,9 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         registerInstructor,
         loginAdmin,
         bootstrapAdmin,
+        quickDemoLogin,
+        loginWithEmailCode,
+        googleSignIn,
         logout,
         logoutAllSessions,
         darkMode,

@@ -226,6 +226,52 @@ class LMSApiClient {
     return res;
   }
 
+  public async quickDemoLogin(role?: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN', email?: string) {
+    const res = await this.request<{ user: any; accessToken: string; refreshToken: string; message: string }>(
+      '/auth/quick-demo-login',
+      { method: 'POST', body: JSON.stringify({ role, email }) }
+    );
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
+    return res;
+  }
+
+  public async googleSignIn(data?: { email?: string; name?: string; role?: string }) {
+    const res = await this.request<{ user: any; accessToken: string; refreshToken: string; message: string }>(
+      '/auth/google-sign-in',
+      { method: 'POST', body: JSON.stringify(data || {}) }
+    );
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
+    return res;
+  }
+
+  public async requestEmailCode(email: string) {
+    return this.request<{
+      success: boolean;
+      email: string;
+      message: string;
+      previewCode?: string;
+    }>('/auth/email-code/request', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
+  public async loginWithEmailCode(email: string, code: string) {
+    const res = await this.request<{
+      success: boolean;
+      message: string;
+      user: any;
+      accessToken: string;
+      refreshToken: string;
+    }>('/auth/email-code/login', { method: 'POST', body: JSON.stringify({ email, code }) });
+
+    if (res.accessToken && res.refreshToken) {
+      this.setTokens(res.accessToken, res.refreshToken);
+    }
+    return res;
+  }
+
   public async logout() {
     try {
       if (this.refreshToken) {

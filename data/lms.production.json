@@ -9,9 +9,61 @@
       "status": "ACTIVE",
       "failedLoginCount": 0,
       "lockedUntil": null,
-      "lastLoginAt": "2026-09-11T13:19:25.926Z",
+      "lastLoginAt": "2026-09-11T13:30:02.595Z",
       "createdAt": "2026-09-11T13:18:48.045Z",
       "updatedAt": "2026-09-11T13:19:17.952Z"
+    },
+    {
+      "id": "usr-demo-student-01",
+      "email": "student@ltitech.edu",
+      "passwordHash": "$2b$10$j5kHlgbmB0Vb3IZD0rR8X.rkYKRBzZ/LPctl.MFIBO74/ve6ywJ62",
+      "name": "Alex Johnson",
+      "role": "STUDENT",
+      "status": "ACTIVE",
+      "failedLoginCount": 0,
+      "lockedUntil": null,
+      "lastLoginAt": "2026-09-11T13:29:59.778Z",
+      "createdAt": "2026-09-11T13:29:59.778Z",
+      "updatedAt": "2026-09-11T13:29:59.778Z"
+    },
+    {
+      "id": "usr-demo-instructor-01",
+      "email": "instructor@ltitech.edu",
+      "passwordHash": "$2b$10$j5kHlgbmB0Vb3IZD0rR8X.rkYKRBzZ/LPctl.MFIBO74/ve6ywJ62",
+      "name": "Dr. Sarah Lin",
+      "role": "INSTRUCTOR",
+      "status": "ACTIVE",
+      "failedLoginCount": 0,
+      "lockedUntil": null,
+      "lastLoginAt": "2026-09-11T13:30:07.586Z",
+      "createdAt": "2026-09-11T13:29:59.778Z",
+      "updatedAt": "2026-09-11T13:29:59.778Z"
+    },
+    {
+      "id": "usr-demo-admin-01",
+      "email": "admin@ltitech.edu",
+      "passwordHash": "$2b$10$pAZbB32B0.SJhMNQTFe.aum0OYrOWi8Ygq1prLl0LsR8sGf3lsTdO",
+      "name": "System Administrator",
+      "role": "ADMIN",
+      "status": "ACTIVE",
+      "failedLoginCount": 0,
+      "lockedUntil": null,
+      "lastLoginAt": "2026-09-11T13:32:04.543Z",
+      "createdAt": "2026-09-11T13:29:59.778Z",
+      "updatedAt": "2026-09-11T13:29:59.778Z"
+    },
+    {
+      "id": "usr-palani-2026",
+      "email": "palanibalamurugan818@gmail.com",
+      "passwordHash": "$2b$10$j5kHlgbmB0Vb3IZD0rR8X.rkYKRBzZ/LPctl.MFIBO74/ve6ywJ62",
+      "name": "Prof. Palani Balamurugan",
+      "role": "INSTRUCTOR",
+      "status": "ACTIVE",
+      "failedLoginCount": 0,
+      "lockedUntil": null,
+      "lastLoginAt": "2026-09-11T13:34:35.030Z",
+      "createdAt": "2026-09-11T13:29:59.778Z",
+      "updatedAt": "2026-09-11T13:29:59.778Z"
     }
   ],
   "studentProfiles": [
@@ -21,9 +73,33 @@
       "studentId": "STU-2026-001",
       "gradeLevel": "Undergraduate",
       "createdAt": "2026-09-11T13:18:48.045Z"
+    },
+    {
+      "id": "prof-demo-student-01",
+      "userId": "usr-demo-student-01",
+      "studentId": "STU-DEMO-2026",
+      "gradeLevel": "Senior / Computer Science",
+      "createdAt": "2026-09-11T13:29:59.778Z"
     }
   ],
-  "instructorProfiles": [],
+  "instructorProfiles": [
+    {
+      "id": "prof-demo-instructor-01",
+      "userId": "usr-demo-instructor-01",
+      "instructorId": "FAC-DEMO-2026",
+      "specialization": "Distributed Systems & Cloud Architecture",
+      "department": "Computer Science & Engineering",
+      "createdAt": "2026-09-11T13:29:59.778Z"
+    },
+    {
+      "id": "prof-palani-2026",
+      "userId": "usr-palani-2026",
+      "instructorId": "FAC-PALANI-001",
+      "specialization": "Information Technology & Cloud Systems",
+      "department": "Computer Science & Engineering",
+      "createdAt": "2026-09-11T13:29:59.778Z"
+    }
+  ],
   "courses": [],
   "courseCategories": [],
   "courseModules": [],
@@ -41,6 +117,96 @@
   "notifications": [],
   "discussions": [],
   "auditLogs": [
+    {
+      "id": "audit-1789133675032-wk8gcel",
+      "userId": "usr-palani-2026",
+      "actor": "palanibalamurugan818@gmail.com",
+      "action": "QUICK_DEMO_LOGIN",
+      "details": "Authenticated via 1-Click Demo as INSTRUCTOR (palanibalamurugan818@gmail.com)",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:34:35.032Z"
+    },
+    {
+      "id": "audit-1789133664614-4hq80d9",
+      "userId": "usr-palani-2026",
+      "actor": "palanibalamurugan818@gmail.com",
+      "action": "GOOGLE_SSO_LOGIN",
+      "details": "Authenticated via Google SSO as INSTRUCTOR (palanibalamurugan818@gmail.com)",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:34:24.614Z"
+    },
+    {
+      "id": "audit-1789133524548-6hrs9ja",
+      "userId": "usr-demo-admin-01",
+      "actor": "admin@ltitech.edu",
+      "action": "QUICK_DEMO_LOGIN",
+      "details": "Authenticated via 1-Click Demo as ADMIN (admin@ltitech.edu)",
+      "ipAddress": "2401:4900:884c:c0df:e8f8:f919:4ac1:b65d",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:32:04.548Z"
+    },
+    {
+      "id": "audit-1789133426084-5sx20zo",
+      "userId": "usr-palani-2026",
+      "actor": "palanibalamurugan818@gmail.com",
+      "action": "EMAIL_CODE_LOGIN",
+      "details": "User palanibalamurugan818@gmail.com logged in with email code",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:30:26.084Z"
+    },
+    {
+      "id": "audit-1789133415824-5b2r92e",
+      "userId": "usr-palani-2026",
+      "actor": "palanibalamurugan818@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "details": "User palanibalamurugan818@gmail.com logged into Instructor Portal",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:30:15.824Z"
+    },
+    {
+      "id": "audit-1789133411809-pxmyhs6",
+      "userId": "usr-demo-admin-01",
+      "actor": "admin@ltitech.edu",
+      "action": "QUICK_DEMO_LOGIN",
+      "details": "Authenticated via 1-Click Demo as ADMIN (admin@ltitech.edu)",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:30:11.809Z"
+    },
+    {
+      "id": "audit-1789133407587-4ubdlcf",
+      "userId": "usr-demo-instructor-01",
+      "actor": "instructor@ltitech.edu",
+      "action": "QUICK_DEMO_LOGIN",
+      "details": "Authenticated via 1-Click Demo as INSTRUCTOR (instructor@ltitech.edu)",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:30:07.587Z"
+    },
+    {
+      "id": "audit-1789133402599-9d1hrt4",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "actor": "alex@example.com",
+      "action": "QUICK_DEMO_LOGIN",
+      "details": "Authenticated via 1-Click Demo as STUDENT (alex@example.com)",
+      "ipAddress": "127.0.0.1",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-11T13:30:02.599Z"
+    },
+    {
+      "id": "audit-1789133005363-9eibc13",
+      "userId": null,
+      "actor": "Anonymous",
+      "action": "LOGIN_FAILED_NO_USER",
+      "details": "Failed login attempt for nonexistent user palanibalamurugan818@gmail.com on Instructor Portal",
+      "ipAddress": "2401:4900:884c:c0df:e8f8:f919:4ac1:b65d",
+      "status": "FAILURE",
+      "createdAt": "2026-09-11T13:23:25.363Z"
+    },
     {
       "id": "audit-1789132765928-ei4gy5a",
       "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
@@ -84,6 +250,102 @@
       "lastActiveAt": "2026-09-11T13:19:25.926Z",
       "expiresAt": "2026-09-18T13:19:25.928Z",
       "createdAt": "2026-09-11T13:19:25.926Z"
+    },
+    {
+      "id": "d8e0a644-9efd-424a-8a5e-d47ed04a31da",
+      "userId": "usr-stu-d773b24d-fd76-48a6-830b-61fee9c4dfcd",
+      "refreshTokenHash": "b80c2cbef57e32a3ba974fdc775df6fd2e126df960cdfa09af1ab9d57347a4a3",
+      "familyId": "c849eaa7-09e9-4596-af52-33dcbecb35ae",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:30:02.595Z",
+      "expiresAt": "2026-09-18T13:30:02.598Z",
+      "createdAt": "2026-09-11T13:30:02.595Z"
+    },
+    {
+      "id": "1de91c99-62c9-4f66-9030-835511bd8547",
+      "userId": "usr-demo-instructor-01",
+      "refreshTokenHash": "56ff420951329db488204b9d713cc96523fd76c9098f15bbd7897f704144c6c7",
+      "familyId": "be07dad8-6494-4a4f-abc2-2e879dd37754",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:30:07.586Z",
+      "expiresAt": "2026-09-18T13:30:07.587Z",
+      "createdAt": "2026-09-11T13:30:07.586Z"
+    },
+    {
+      "id": "d3795ff8-00a8-4ef9-8177-33407df8ea5d",
+      "userId": "usr-demo-admin-01",
+      "refreshTokenHash": "81fa92750abe9ab462632d303c2273bb083f93fe9752b657d65cad2c6b1e31b1",
+      "familyId": "08dfe7bd-f818-41aa-a3e0-4426a691fbc2",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:30:11.807Z",
+      "expiresAt": "2026-09-18T13:30:11.809Z",
+      "createdAt": "2026-09-11T13:30:11.807Z"
+    },
+    {
+      "id": "48b64338-490f-490f-8aff-bf50389eea15",
+      "userId": "usr-palani-2026",
+      "refreshTokenHash": "a18136bf0d4bddbf536a98d884a4de56abc6fd6895aef575b82476a5c4825600",
+      "familyId": "064d13d2-953b-411b-9ef7-17de2ea8cbff",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:30:15.823Z",
+      "expiresAt": "2026-09-18T13:30:15.824Z",
+      "createdAt": "2026-09-11T13:30:15.823Z"
+    },
+    {
+      "id": "2b64edbf-00a1-46e8-82dc-406c6e953258",
+      "userId": "usr-palani-2026",
+      "refreshTokenHash": "172277150d74c6e6cd022247090355de50d7488bad5b6e80ac5ef0060222ba84",
+      "familyId": "7e9f9045-3742-4f59-9299-1211240be662",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:30:26.081Z",
+      "expiresAt": "2026-09-18T13:30:26.084Z",
+      "createdAt": "2026-09-11T13:30:26.081Z"
+    },
+    {
+      "id": "4067a155-700d-4eda-b736-eae25446fd5f",
+      "userId": "usr-demo-admin-01",
+      "refreshTokenHash": "d9043626a040b3d73b7eec5c2319440f8b18fb598584b461fdbec626141c1d53",
+      "familyId": "7ee4fbd7-b045-4db5-a29f-856c7a80693a",
+      "isRevoked": true,
+      "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "ipAddress": "2401:4900:884c:c0df:e8f8:f919:4ac1:b65d",
+      "lastActiveAt": "2026-09-11T13:32:04.543Z",
+      "expiresAt": "2026-09-18T13:32:04.547Z",
+      "createdAt": "2026-09-11T13:32:04.543Z"
+    },
+    {
+      "id": "6a343ca9-f14d-43a6-b1ca-b762ec32def0",
+      "userId": "usr-palani-2026",
+      "refreshTokenHash": "ca19adf38e0451993670c37aba3b3aaebecd66a0d489b0c079054c9c6aa29746",
+      "familyId": "3b9758cb-2fb4-4001-aaeb-df8b3fa2c276",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:34:24.610Z",
+      "expiresAt": "2026-09-18T13:34:24.614Z",
+      "createdAt": "2026-09-11T13:34:24.610Z"
+    },
+    {
+      "id": "05e426f2-348c-4a87-82cf-2f98a4153d96",
+      "userId": "usr-palani-2026",
+      "refreshTokenHash": "8728e1c6675ed1b8fe304b3209d2a0d86bae5aa15891c4c7a70af94a62a1e59e",
+      "familyId": "578e4f09-c2b5-45d0-a763-7bd7ef92c0ea",
+      "isRevoked": false,
+      "device": "curl/7.88.1",
+      "ipAddress": "127.0.0.1",
+      "lastActiveAt": "2026-09-11T13:34:35.030Z",
+      "expiresAt": "2026-09-18T13:34:35.031Z",
+      "createdAt": "2026-09-11T13:34:35.030Z"
     }
   ],
   "emailVerificationTokens": [
@@ -96,10 +358,31 @@
       "expiresAt": "2026-09-11T13:33:55.310Z",
       "verified": true,
       "createdAt": "2026-09-11T13:18:55.310Z"
+    },
+    {
+      "id": "evt-a6a593e4-036a-4230-b409-fee5e1329da0",
+      "userId": "usr-palani-2026",
+      "email": "palanibalamurugan818@gmail.com",
+      "code": "674256",
+      "token": "2b651c343dc16b10ea2073f2274848354300831c0059f4b39eac8ac3f24229a4",
+      "expiresAt": "2026-09-11T13:45:21.431Z",
+      "verified": true,
+      "createdAt": "2026-09-11T13:30:21.431Z"
     }
   ],
   "passwordResetTokens": [],
   "emailLogs": [
+    {
+      "id": "email-1789133421724-oul8h",
+      "to": "palanibalamurugan818@gmail.com",
+      "subject": "[LTI LMS] 674256 is your student verification code",
+      "type": "VERIFICATION",
+      "code": "674256",
+      "previewText": "Hello Prof. Palani Balamurugan,\n\nYour LTI Tech EduTech LMS verification code is: 674256\n\nThis code will expire in 15 minutes.\n\nAlternatively, verify your accoun",
+      "sentAt": "2026-09-11T13:30:21.432Z",
+      "status": "SIMULATED",
+      "error": "API key is invalid"
+    },
     {
       "id": "email-1789132757952-oiae9",
       "to": "alex@example.com",
